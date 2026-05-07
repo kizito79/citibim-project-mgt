@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CITIBIM Professional Gantt Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- Leaflet.js CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- html2pdf library (from unpkg CDN) -->
+  <script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.2.0/dist/gridstack.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/gridstack@10.2.0/dist/gridstack-all.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="logo">
+      <img src="https://citibim.com/wp-content/uploads/2025/05/cropped-Citibim-logo.png" alt="Logo">
+          </div>
+    <nav class="nav-menu">
+      <div class="nav-item" data-page="summary" title="Summary" aria-label="View project summary" role="button">📈</div>
+      <div class="nav-item active" data-page="dashboard" title="Dashboard" aria-label="View dashboard" role="button">📊</div>
+      <div class="nav-item" data-page="projects" title="Projects" aria-label="View projects" role="button">📁</div>
+      <div class="nav-item" data-page="team" title="Team" aria-label="View team" role="button">👥</div>
+      <div class="nav-item" data-page="settings" title="Settings" aria-label="View settings" role="button">⚙️</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="nav-item" data-page="help" title="Help" aria-label="View help" role="button">❓</div>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <div class="main">
+
+    <!-- Professional Topbar -->
+    <header class="topbar">
+      <button id="hamburger-btn" class="hamburger-btn" title="Toggle menu" style="display: none;">☰</button>
+      <div class="topbar-left">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">CITIBIM PROJECT MANAGEMENT DASHBOARD</h1>
+            <p class="page-subtitle">Track milestones, team progress, and project health from a single workspace.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="topbar-actions">
+          <button id="save-btn" class="btn btn-success" title="Save to backend">
+            <span>💾 Save</span>
+          </button>
+          <button id="add-task-btn" class="btn btn-accent" title="Create new task">
+            <span>➕ Add Task</span>
+          </button>
+        </div>
+        <div class="topbar-secondary">
+          <button id="import-btn" class="btn btn-primary" title="Import from CSV/Excel">
+            <span>📥 Import</span>
+          </button>
+          <button id="export-btn" class="btn btn-secondary" title="Export data">
+            <span>📤 Export</span>
+          </button>
+          <button id="share-btn" class="btn btn-accent" title="Share view-only link" aria-label="Share project view">
+            <span>🔗 Share</span>
+          </button>
+          <button id="pdf-btn" class="btn btn-secondary" title="Export to PDF" aria-label="Export project to PDF">
+            <span>📄 PDF</span>
+          </button>
+        </div>
+        <button id="theme-toggle-btn" class="btn-icon" title="Toggle dark/light mode">🌙</button>
+        <div class="topbar-menu">
+          <button id="menu-btn" class="btn-icon" title="Menu">⋮</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="content">
+
+      <!-- Summary View -->
+      <div id="view-summary" class="view-container" style="display: none;">
+        <!-- Optimized KPI Header -->
+        <div class="kpi-header">
+          <div class="kpi-header-top">
+            <div class="kpi-title-section">
+              <div class="editable-title-group">
+                <h2 id="summary-title" class="editable-title" contenteditable="true" title="Click to edit">Project Summary</h2>
+                <button id="edit-title-save-btn" class="btn-icon" title="Save title" style="display: none;">✓</button>
+              </div>
+            </div>
+            <div class="kpi-selector">
+              <label for="kpi-project-select">Project:</label>
+              <select id="kpi-project-select" class="form-control">
+                <option value="">All Projects</option>
+              </select>
+            </div>
+            <div class="kpi-selector">
+              <label for="page-size-select">Page Size:</label>
+              <select id="page-size-select" class="form-control">
+                <option value="a4">A4 (Standard)</option>
+                <option value="a3">A3 (Large - More Content)</option>
+                <option value="letter">Letter</option>
+                <option value="custom">Custom (Full)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="kpi-actions">
+            <button id="create-stats-kpi-btn" class="btn btn-accent kpi-action-btn" title="Create chart/stats KPI">
+              <span class="btn-icon-sm">📊</span> Create Stats KPI
+            </button>
+            <button id="create-value-kpi-btn" class="btn btn-accent kpi-action-btn" title="Create value KPI">
+              <span class="btn-icon-sm">🔢</span> Create Value KPI
+            </button>
+            <button id="create-gantt-kpi-btn" class="btn btn-accent kpi-action-btn" title="Create Gantt chart KPI">
+              <span class="btn-icon-sm">📅</span> Create Gantt KPI
+            </button>
+            <button id="add-project-location-btn" class="btn btn-secondary kpi-action-btn" title="Add project location map">
+              <span class="btn-icon-sm">📍</span> Add Project Location
+            </button>
+            <button id="add-project-photo-btn" class="btn btn-secondary kpi-action-btn" title="Add project photo">
+              <span class="btn-icon-sm">📸</span> Add Project Photo
+            </button>
+          </div>
+        </div>
+        <div class="summary-grid grid-stack" id="summary-grid">
+          <div class="grid-stack-item" gs-w="4" gs-h="6" gs-x="0" gs-y="0">
+            <div class="grid-stack-item-content summary-card" data-card-id="total-tasks-card">
+              <div class="card-header">
+                <h3>Total Tasks</h3>
+                <div class="card-actions">
+                  <button class="card-lock-btn" title="Lock this card" data-card-id="total-tasks-card"></button>
+                  <button class="card-remove-btn" title="Remove this card" data-card-id="total-tasks-card">🗑</button>
+                </div>
+              </div>
+              <div class="kpi-value" id="total-tasks">0</div>
+            </div>
+          </div>
+          <div class="grid-stack-item" gs-w="4" gs-h="6" gs-x="4" gs-y="0">
+            <div class="grid-stack-item-content summary-card" data-card-id="avg-progress-card">
+              <div class="card-header">
+                <h3>Average Progress %</h3>
+                <div class="card-actions">
+                  <button class="card-lock-btn" title="Lock this card" data-card-id="avg-progress-card"></button>
+                  <button class="card-remove-btn" title="Remove this card" data-card-id="avg-progress-card">🗑</button>
+                </div>
+              </div>
+              <div class="kpi-value" id="avg-progress">0%</div>
+            </div>
+          </div>
+          <div class="grid-stack-item" gs-w="4" gs-h="6" gs-x="8" gs-y="0">
+            <div class="grid-stack-item-content summary-card" data-card-id="status-chart-card">
+              <div class="card-header">
+                <h3>Task Status Distribution</h3>
+                <div class="card-actions">
+                  <button class="card-lock-btn" title="Lock this card" data-card-id="status-chart-card"></button>
+                  <button class="card-remove-btn" title="Remove this card" data-card-id="status-chart-card">🗑</button>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="status-chart"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="grid-stack-item" gs-w="12" gs-h="6" gs-x="0" gs-y="12">
+            <div class="grid-stack-item-content summary-card" data-card-id="map-card">
+              <div class="card-header">
+                <h3>Project Sites Map</h3>
+                <div class="card-actions">
+                  <button class="card-lock-btn" title="Lock this card" data-card-id="map-card"></button>
+                  <button class="card-remove-btn" title="Remove this card" data-card-id="map-card">🗑</button>
+                </div>
+              </div>
+              <div class="map-wrapper">
+                <div id="map"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: PDF Loading Spinner -->
+        <div id="pdf-loading-modal" class="modal hidden">
+          <div class="modal-overlay" style="backdrop-filter: blur(5px);"></div>
+          <div class="modal-content" style="background: transparent; box-shadow: none; border: none;">
+            <div style="text-align: center; max-width: 400px;">
+              <div class="pdf-spinner"></div>
+              <p class="pdf-export-status" style="margin-top: 20px; font-size: 16px; font-weight: 500; color: var(--text-secondary);">Generating PDF...</p>
+              <div style="margin-top: 20px; width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                <div class="pdf-export-progress" style="height: 100%; width: 0%; background: var(--accent-blue); transition: width 0.3s ease;"></div>
+              </div>
+              <p style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">Please wait, do not close this window...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- SINGLE DYNAMIC KPI BUILDER MODAL -->
+<div id="modal-kpi-builder" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content modal-md">
+    <div class="modal-header">
+      <h2 id="kpi-builder-title">Create KPI Card</h2>
+      <button class="btn-close" data-modal-close="modal-kpi-builder">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <form id="kpi-builder-form" novalidate>
+        <!-- 1. Universal Fields (Always visible) -->
+        <div class="form-group">
+          <label>Card Title *</label>
+          <input type="text" id="builder-card-title" class="form-control" data-required="true" placeholder="e.g., Monthly Revenue">
+          <span class="error-text">Title is required.</span>
+        </div>
+        
+        <div class="form-group">
+          <label>Select Project *</label>
+          <select id="builder-project-select" class="form-control" data-required="true">
+            <option value="">-- Select Project --</option>
+          </select>
+          <span class="error-text">Please select a project.</span>
+        </div>
+
+        <div class="form-group">
+          <label>Card Size *</label>
+          <select id="builder-card-size" class="form-control" data-required="true">
+            <option value="small" selected>1/3 Width (Small)</option>
+            <option value="medium">Half Width (Medium)</option>
+            <option value="large">2/3 Width (Large)</option>
+            <option value="xlarge">Full Width (X-Large)</option>
+          </select>
+        </div>
+
+        <!-- 2. Dynamic Injection Container -->
+        <!-- JS will inject Chart Type, Calculation Type, etc., here based on the chosen KPI -->
+        <div id="builder-dynamic-fields"></div>
+
+        <!-- 3. Live Preview Container -->
+        <div id="builder-preview-container" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border-color);">
+            <h4>Live Preview</h4>
+            <div id="builder-preview-box" class="kpi-preview-box"></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-modal-close="modal-kpi-builder">Cancel</button>
+      <button class="btn btn-primary" id="builder-create-btn">Create Card</button>
+    </div>
+  </div>
+</div>
+
+        <!-- Modal: Add Project Location/Map -->
+        <div id="modal-add-project-location" class="modal hidden">
+          <div class="modal-overlay"></div>
+          <div class="modal-content modal-md">
+            <div class="modal-header">
+              <h2>Add Project Location Map</h2>
+              <button class="btn-close" data-modal="modal-add-project-location">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Select Project *</label>
+                <select id="location-project-select" class="form-control">
+                  <option value="">-- Select Project --</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Latitude Column *</label>
+                  <select id="location-lat-field" class="form-control">
+                    <option value="">-- Select Lat Column --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Longitude Column *</label>
+                  <select id="location-lon-field" class="form-control">
+                    <option value="">-- Select Lon Column --</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Photo Column (Optional)</label>
+                <select id="location-photo-field" class="form-control">
+                  <option value="">-- No Photo Column --</option>
+                </select>
+              </div>
+              <div class="photo-options">
+                <p class="small-text">Photos: Select from column or add URL link</p>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-preview" data-modal="modal-add-project-location">👁 Preview</button>
+              <button class="btn btn-secondary" data-modal-close="modal-add-project-location">Cancel</button>
+              <button class="btn btn-primary" id="location-create-btn">Create Map Card</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Add Project Photo -->
+        <div id="modal-add-project-photo" class="modal hidden">
+          <div class="modal-overlay"></div>
+          <div class="modal-content modal-md">
+            <div class="modal-header">
+              <h2>Add Project Photo</h2>
+              <button class="btn-close" data-modal="modal-add-project-photo">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Select Project *</label>
+                <select id="photo-project-select" class="form-control">
+                  <option value="">-- Select Project --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Photo Column (Contains URLs or File Paths)</label>
+                <select id="photo-source-field" class="form-control">
+                  <option value="">-- Select Photo Column --</option>
+                </select>
+              </div>
+              <div class="form-divider">OR</div>
+              <div class="form-group">
+                <label>Add Photo from URL/Link</label>
+                <input type="text" id="photo-url-input" class="form-control" placeholder="https://example.com/photo.jpg">
+              </div>
+              <div class="form-group">
+                <label>Photo Title/Caption</label>
+                <input type="text" id="photo-caption" class="form-control" placeholder="Enter photo title">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-modal-close="modal-add-project-photo">Cancel</button>
+              <button class="btn btn-primary" id="photo-create-btn">Add Photo Card</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Dashboard View (Gantt) -->
+      <div id="view-dashboard" class="view-container">
+        <div class="task-panel">
+          <div class="panel-header">
+            <h2>Tasks</h2>
+            <div class="panel-controls">
+              <input type="text" id="task-filter" placeholder="Search tasks..." class="task-filter">
+            </div>
+          </div>
+          <div class="task-list" id="task-list-container">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Right Panel: Gantt Timeline -->
+        <div class="gantt-panel">
+          <div class="gantt-toolbar">
+            <div class="gantt-toolbar-left">
+              <h2>Project Timeline</h2>
+              <p class="gantt-subtitle">Adjust the timeline view and inspect task durations.</p>
+            </div>
+            <div class="gantt-toolbar-right control-group">
+              <button id="day-btn" class="btn-scale" title="Daily view">Day</button>
+              <button id="week-btn" class="btn-scale" title="Weekly view">Week</button>
+              <button id="month-btn" class="btn-scale active" title="Monthly view">Month</button>
+            </div>
+          </div>
+          <div class="gantt-container">
+            <div class="timeline-header" id="timeline"></div>
+            <div class="gantt-chart" id="bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Projects View -->
+      <div id="view-projects" class="view-container" style="display: none;">
+        <div class="projects-content">
+          <div class="projects-header">
+            <h2>Projects Management</h2>
+            <button id="create-project-btn" class="btn btn-primary">+ Create Project</button>
+          </div>
+
+          <div class="projects-grid" id="projects-grid">
+            <!-- Projects will be populated here -->
+          </div>
+
+          <!-- Project Details Modal -->
+          <div id="project-modal" class="modal hidden">
+            <div class="modal-overlay"></div>
+            <div class="modal-content modal-lg">
+              <div class="modal-header">
+                <h2 id="project-modal-title">Project Details</h2>
+                <button class="btn-close" id="project-modal-close">✕</button>
+              </div>
+
+              <div class="modal-body">
+                <div class="project-info-section">
+                  <h3>Project Information</h3>
+                  <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="project-name" placeholder="Enter project name">
+                  </div>
+                  <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="project-description" placeholder="Project description"></textarea>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Source</label>
+                      <input type="text" id="project-source" readonly>
+                    </div>
+                    <div class="form-group">
+                      <label>Created</label>
+                      <input type="text" id="project-created" readonly>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="project-sheets-section">
+                  <h3>Data Sheets</h3>
+                  <div id="project-sheets-list">
+                    <!-- Sheets will be populated here -->
+                  </div>
+                  <button id="add-sheet-btn" class="btn btn-secondary">+ Add Sheet</button>
+                </div>
+
+                <div class="project-data-section">
+                  <h3>Data Preview</h3>
+                  <div class="sheet-selector">
+                    <label>Select Sheet:</label>
+                    <select id="sheet-selector">
+                      <option value="">-- Choose Sheet --</option>
+                    </select>
+                  </div>
+                  <div class="data-table-container" id="project-data-table">
+                    <!-- Data table will be populated here -->
+                  </div>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn btn-secondary" id="project-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="project-modal-save">Save Changes</button>
+                <button class="btn btn-danger" id="project-modal-delete">Delete Project</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team View -->
+      <div id="view-team" class="view-container" style="display: none;">
+        <div class="team-content">
+          <h2>Team Directory & Workload</h2>
+          <div id="team-workload" class="team-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings View -->
+      <div id="view-settings" class="view-container" style="display: none;">
+        <div class="settings-content">
+          <h2>Settings</h2>
+          <div class="settings-section">
+            <h3>Google Sheets Integration</h3>
+            <div class="form-group">
+              <label for="sheets-url">Published Google Sheets CSV URL:</label>
+              <input type="url" id="sheets-url" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv">
+              <div class="button-group">
+                <button id="sync-sheets-btn" class="btn btn-primary">Sync Now</button>
+                <button id="stop-sheets-btn" class="btn btn-secondary" style="display: none;">Stop Sync</button>
+                <button id="preview-sheets-btn" class="btn btn-secondary">Preview Tabs</button>
+              </div>
+            </div>
+            <div id="sheet-tabs-container" class="settings-section" style="display: none;">
+              <h4>Sheet Tabs</h4>
+              <div id="sheet-tabs-list" class="sheet-tabs-list"></div>
+            </div>
+            <div id="sheet-preview-container" class="settings-section" style="display: none;">
+              <h4>Selected Tab Preview</h4>
+              <div id="sheet-preview" class="sheet-preview"></div>
+            </div>
+            <div class="button-group" id="sheet-import-controls" style="display: flex; gap: 10px; margin-bottom: 15px;">
+              <button id="import-selected-tab-btn" class="btn btn-success" style="display: none;">Import Selected Tab</button>
+              <button id="import-all-tabs-btn" class="btn btn-accent" style="display: none;">Import All Tabs</button>
+            </div>
+            <div id="sheets-status" class="settings-status" style="display: none;">
+              <span id="sheets-status-text">Syncing every 5 minutes...</span>
+            </div>
+            <p class="settings-note">
+              Enter the published CSV URL from your Google Sheet to enable live data sync every 5 minutes.<br>
+              <strong>How to get the URL:</strong> In Google Sheets, go to File → Share → Publish to web → CSV, then copy the link.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Help View -->
+      <div id="view-help" class="view-container" style="display: none;">
+        <div class="help-content">
+          <h2>Help & Documentation</h2>
+          <div class="help-section">
+            <h3>Getting Started</h3>
+            <p>Welcome to CITIBIM Professional Gantt Dashboard! This tool helps you manage and visualize project timelines.</p>
+            <ul>
+              <li><strong>Dashboard:</strong> View your Gantt chart timeline</li>
+              <li><strong>Summary:</strong> Overview of project KPIs and charts</li>
+              <li><strong>Projects:</strong> Manage data sources and sheets</li>
+              <li><strong>Team:</strong> View team workload and assignments</li>
+              <li><strong>Settings:</strong> Configure Google Sheets integration</li>
+            </ul>
+          </div>
+
+          <div class="help-section">
+            <h3>Importing Data</h3>
+            <p>You can import project data from CSV files or Google Sheets:</p>
+            <ol>
+              <li>Click the "Import" button in the top bar</li>
+              <li>Upload a CSV file or enter a Google Sheets URL</li>
+              <li>Map columns to task fields (name, start date, end date, etc.)</li>
+              <li>Import the data to create tasks</li>
+            </ol>
+          </div>
+
+          <div class="help-section">
+            <h3>Google Sheets Integration</h3>
+            <p>To enable live sync with Google Sheets:</p>
+            <ol>
+              <li>Publish your Google Sheet as CSV</li>
+              <li>Copy the published CSV URL</li>
+              <li>Paste it in Settings and click "Sync Now"</li>
+              <li>Data will auto-sync every 5 minutes</li>
+            </ol>
+          </div>
+
+          <div class="help-section">
+            <h3>Keyboard Shortcuts</h3>
+            <ul>
+              <li><kbd>Ctrl+S</kbd> - Save tasks</li>
+              <li><kbd>Ctrl+E</kbd> - Export data</li>
+              <li><kbd>Ctrl+I</kbd> - Open import wizard</li>
+            </ul>
+          </div>
+
+          <div class="help-section">
+            <h3>Troubleshooting</h3>
+            <ul>
+              <li><strong>Import fails:</strong> Check CSV format and column mapping</li>
+              <li><strong>Map not loading:</strong> Ensure Leaflet.js is loaded</li>
+              <li><strong>Data not saving:</strong> Check browser localStorage</li>
+              <li><strong>Google Sheets sync:</strong> Verify the URL is published correctly</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Create Dynamic KPI Modal -->
+<div id="create-kpi-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content modal-lg">
+    <div class="modal-header">
+      <h2>Create Dynamic KPI Card</h2>
+      <button class="btn-close" id="kpi-modal-close">✕</button>
+    </div>
+    
+    <div class="modal-body">
+      <form id="kpi-form">
+        <div class="form-group">
+          <label for="kpi-card-title">Card Title *</label>
+          <input type="text" id="kpi-card-title" placeholder="e.g., Completion Rate, Total Budget" required class="form-control">
+          <small>Enter a meaningful title for your KPI card</small>
+        </div>
+
+        <div class="form-group">
+          <label for="kpi-data-source">Data Source *</label>
+          <select id="kpi-data-source" class="form-control" required>
+            <option value="">-- Select a data source --</option>
+            <option value="tasks">Tasks Data</option>
+            <option value="custom">Custom Data</option>
+          </select>
+          <small>Choose where to pull data from</small>
+        </div>
+
+        <div class="form-group">
+          <label for="kpi-calculation">Calculation Type *</label>
+          <select id="kpi-calculation" class="form-control" required>
+            <option value="">-- Select calculation --</option>
+            <option value="count">Count (Number of items)</option>
+            <option value="sum">Sum (Total of values)</option>
+            <option value="average">Average (Mean of values)</option>
+            <option value="max">Maximum (Highest value)</option>
+            <option value="min">Minimum (Lowest value)</option>
+            <option value="percentage">Percentage (% of total)</option>
+          </select>
+          <small>Choose how to calculate the KPI</small>
+        </div>
+
+        <div class="form-group" id="kpi-column-group" style="display: none;">
+          <label for="kpi-column">Column/Field *</label>
+          <select id="kpi-column" class="form-control">
+            <option value="">-- Select column --</option>
+          </select>
+          <small>Select the data column to use for calculation</small>
+        </div>
+
+        <div class="form-group" id="kpi-filter-group" style="display: none;">
+          <label for="kpi-filter">Filter (Optional)</label>
+          <select id="kpi-filter" class="form-control">
+            <option value="">-- No filter --</option>
+            <option value="completed">Completed Only</option>
+            <option value="active">Active Only</option>
+            <option value="overdue">Overdue Only</option>
+          </select>
+          <small>Apply a filter to the data</small>
+        </div>
+
+        <div class="form-group">
+          <label for="kpi-card-width">Card Size</label>
+          <select id="kpi-card-width" class="form-control">
+            <option value="4" selected>Small (1/3 width)</option>
+            <option value="6">Medium (1/2 width)</option>
+            <option value="8">Large (2/3 width)</option>
+            <option value="12">Full Width</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="kpi-card-type">Display Type</label>
+          <select id="kpi-card-type" class="form-control">
+            <option value="value">Simple Value</option>
+            <option value="progress-bar">Progress Bar</option>
+            <option value="gauge">Gauge/Meter</option>
+            <option value="chart">Mini Chart</option>
+          </select>
+        </div>
+      </form>
+
+      <div id="kpi-preview" class="kpi-preview-container" style="display: none; margin-top: 20px;">
+        <h4>Preview</h4>
+        <div class="kpi-preview-box" id="kpi-preview-content"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="kpi-preview-btn" class="btn btn-secondary">👁 Preview</button>
+      <button id="kpi-create-btn" class="btn btn-primary">✓ Create Card</button>
+      <button id="kpi-modal-cancel" class="btn btn-outline">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Wizard Modal -->
+<div id="import-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content modal-lg">
+    <div class="modal-header">
+      <h2>Import Project Data</h2>
+      <button class="btn-close" id="modal-close">✕</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Step Indicator -->
+      <div class="step-indicator">
+        <div class="step active" data-step="1">
+          <div class="step-number">1</div>
+          <div class="step-label">Upload</div>
+        </div>
+        <div class="step" data-step="2">
+          <div class="step-number">2</div>
+          <div class="step-label">Preview</div>
+        </div>
+        <div class="step" data-step="3">
+          <div class="step-number">3</div>
+          <div class="step-label">Map Columns</div>
+        </div>
+        <div class="step" data-step="4">
+          <div class="step-number">4</div>
+          <div class="step-label">Import</div>
+        </div>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div class="wizard-step active" data-step="1">
+        <h3>Upload CSV or Google Sheets</h3>
+        <div class="upload-area" id="upload-area">
+          <div class="upload-icon">📁</div>
+          <p>Drag and drop your file here or click to select</p>
+          <input type="file" id="file-input" accept=".csv" style="display:none;">
+          <button class="btn btn-primary" id="browse-btn">Choose File</button>
+        </div>
+        <div class="file-selected hidden" id="file-selected">
+          <p>✓ File ready: <span id="file-name"></span></p>
+        </div>
+        <div class="sheet-import-group">
+          <label for="gsheet-url">Google Sheets URL</label>
+          <div class="gsheet-help-box" style="background: #f0f7ff; border: 1px solid #4a90e2; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 8px;">📋 How to Import from Google Sheets:</div>
+            <ol style="margin: 0 0 0 20px; padding: 0; color: #555; font-size: 13px; line-height: 1.5;">
+              <li>Open your Google Sheet</li>
+              <li>Click <strong>File → Share → Publish to web</strong></li>
+              <li>Select format: <strong>Comma-separated values (.csv)</strong></li>
+              <li>Click <strong>Publish</strong>, then <strong>Copy link</strong></li>
+              <li>Paste the link below and click "Load Spreadsheet"</li>
+            </ol>
+          </div>
+          <div class="gsheet-controls">
+            <input type="url" id="gsheet-url" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv" />
+            <button class="btn btn-secondary" id="load-sheets-btn">Load Spreadsheet</button>
+          </div>
+          <div id="wizard-sheet-message" class="sheet-wizard-message"></div>
+          <div id="wizard-sheet-tabs-panel" class="sheet-tabs-panel hidden">
+            <h4>Select a tab</h4>
+            <div id="wizard-sheet-tabs-list" class="sheet-tabs-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Preview -->
+      <div class="wizard-step" data-step="2">
+        <h3>Preview Data</h3>
+        <div class="preview-table" id="preview-table">
+          <!-- Populated from file -->
+        </div>
+      </div>
+
+      <!-- Step 3: Column Mapping -->
+      <div class="wizard-step" data-step="3">
+        <h3>Map Columns</h3>
+        <div class="mapping-container" id="mapping-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Step 4: Import Summary -->
+      <div class="wizard-step" data-step="4">
+        <h3>Ready to Import</h3>
+        <div class="import-summary" id="import-summary">
+          <!-- Summary populated here -->
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="wizard-back" class="btn btn-secondary" disabled>← Back</button>
+      <button id="wizard-next" class="btn btn-primary">Next →</button>
+      <button id="wizard-import" class="btn btn-success hidden">✓ Import</button>
+      <button id="wizard-cancel" class="btn btn-outline">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div id="task-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="task-modal-title">Add New Task</h2>
+      <button class="btn-close" id="task-modal-close">✕</button>
+    </div>
+    
+    <div class="modal-body">
+      <form id="task-form">
+        <div class="form-group">
+          <label>Task Name *</label>
+          <input type="text" id="task-name" placeholder="Enter task name" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Start Date *</label>
+            <input type="date" id="task-start" required>
+          </div>
+          <div class="form-group">
+            <label>End Date *</label>
+            <input type="date" id="task-end" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Progress (%)</label>
+            <input type="number" id="task-progress" min="0" max="100" value="0">
+          </div>
+          <div class="form-group">
+            <label>Assigned To</label>
+            <input type="text" id="task-assignee" placeholder="Team member name">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Dependencies</label>
+          <select id="task-depends" multiple title="Hold Ctrl to select multiple">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="task-modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="task-modal-save">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="script.js"></script>
+<script src="kpi-modals.js"></script>
+</body>
+</html>
