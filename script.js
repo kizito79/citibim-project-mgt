@@ -8,20 +8,33 @@ const DAY = 1000 * 60 * 60 * 24;
 
 // Notification system
 function showNotification(message, type = 'info') {
-  // Create notification element
+  const safeType = ['error', 'success', 'warning', 'info'].includes(type) ? type : 'info';
   const notification = document.createElement('div');
-  notification.className = `notification notification-${type}`;
-  notification.innerHTML = `
-    <span>${message}</span>
-    <button class="notification-close">&times;</button>
-  `;
-  
-  // Style the notification
+  notification.className = `notification notification-${safeType}`;
+
+  const messageEl = document.createElement('span');
+  messageEl.textContent = String(message || '');
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'notification-close';
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close notification');
+  closeBtn.textContent = '×';
+
+  notification.append(messageEl, closeBtn);
+
+  const notificationColours = {
+    error: '#ef4444',
+    success: '#10b981',
+    warning: '#f59e0b',
+    info: '#3b82f6'
+  };
+
   Object.assign(notification.style, {
     position: 'fixed',
     top: '20px',
     right: '20px',
-    background: type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6',
+    background: notificationColours[safeType],
     color: 'white',
     padding: '12px 16px',
     borderRadius: '8px',
@@ -36,29 +49,26 @@ function showNotification(message, type = 'info') {
     transform: 'translateY(-10px)',
     transition: 'all 0.3s ease'
   });
-  
-  // Close button
-  const closeBtn = notification.querySelector('.notification-close');
+
   closeBtn.style.background = 'none';
   closeBtn.style.border = 'none';
   closeBtn.style.color = 'white';
   closeBtn.style.fontSize = '18px';
   closeBtn.style.cursor = 'pointer';
   closeBtn.style.marginLeft = '10px';
-  
+
   closeBtn.addEventListener('click', () => {
     notification.remove();
   });
-  
-  // Add to body
+
   document.body.appendChild(notification);
-  
+
   // Animate in
   setTimeout(async () => {
     notification.style.opacity = '1';
     notification.style.transform = 'translateY(0)';
   }, 10);
-  
+
   // Auto remove after 5 seconds
   setTimeout(async () => {
     if (notification.parentNode) {
@@ -116,7 +126,7 @@ function getTimelineBounds() {
   state.tasks.forEach(task => {
     const taskStart = task.start instanceof Date ? task.start : new Date(task.start);
     const taskEnd = task.end instanceof Date ? task.end : new Date(task.end);
-    
+
     if (!isNaN(taskStart.getTime())) {
       if (earliest === null || taskStart < earliest) earliest = new Date(taskStart);
     }
@@ -203,7 +213,7 @@ const PDFWorkerManager = {
 
   initialize() {
     if (this.isInitialized) return;
-    
+
     try {
       // Check if web workers are supported
       if (typeof(Worker) !== 'undefined') {
@@ -222,7 +232,7 @@ const PDFWorkerManager = {
     if (this.worker) {
       this.worker.onmessage = (event) => {
         const { action, status, percent, error } = event.data;
-        
+
         if (action === 'progress') {
           callback({ status, percent, type: 'progress' });
         } else if (action === 'error') {
@@ -256,7 +266,7 @@ function getNextMonthStart(date) { const nextMonth = new Date(date); nextMonth.s
 
 function calculateTaskRows() {
   if (state.tasks.length === 0) return;
-  
+
   const sortedTasks = [...state.tasks].sort((a, b) => {
     const dateA = a.start instanceof Date ? a.start : new Date(a.start);
     const dateB = b.start instanceof Date ? b.start : new Date(b.start);
@@ -275,7 +285,7 @@ function calculateTaskRows() {
         for (const occupant of occupiedRows[row]) {
           const occupantStart = occupant.start instanceof Date ? occupant.start : new Date(occupant.start);
           const occupantEnd = occupant.end instanceof Date ? occupant.end : new Date(occupant.end);
-          
+
           if ((taskStart >= occupantStart && taskStart < occupantEnd) ||
               (taskEnd > occupantStart && taskEnd <= occupantEnd) ||
               (taskStart <= occupantStart && taskEnd >= occupantEnd)) {
@@ -301,12 +311,12 @@ function calculateMonthOffsets(startDate, numMonths) {
   const offsets = [{ date: new Date(startDate), offset: 0 }];
   let currentDate = new Date(startDate);
   let totalDays = 0;
-  
+
   // Ensure we start at the beginning of the month for consistency
   if (currentDate.getDate() !== 1) {
     currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
   }
-  
+
   for (let i = 0; i < numMonths; i++) {
     const daysInCurrentMonth = getDaysInMonth(currentDate);
     totalDays += daysInCurrentMonth;
@@ -316,7 +326,13 @@ function calculateMonthOffsets(startDate, numMonths) {
   return offsets;
 }
 
-function formatDate(date) { if (!(date instanceof Date)) date = new Date(date); return date.toISOString().split('T')[0]; }
+function formatDate(date) {
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid date value: ${date}`);
+  }
+  return parsed.toISOString().split('T')[0];
+}
 function formatDateDisplay(date) { return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
 function sanitizeInput(str) {
   if (typeof str !== 'string') return '';
@@ -324,6 +340,20 @@ function sanitizeInput(str) {
   const div = document.createElement('div');
   div.textContent = str.trim().substring(0, 500);
   return div.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return sanitizeInput(String(value || '')).replace(/`/g, '&#96;');
+}
+
+function sanitizeValue(value) {
+  return sanitizeInput(String(value ?? ''));
+}
+
+function clampNumber(value, min, max, fallback = min) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 function validateEmail(email) {
@@ -339,7 +369,7 @@ function validateURL(url) {
     return false;
   }
 }
-function generateTaskId() { 
+function generateTaskId() {
   if (state.tasks.length === 0) return 1;
   const ids = state.tasks.map(t => parseInt(t.id) || 0).filter(id => !isNaN(id) && id > 0);
   return ids.length > 0 ? Math.max(...ids) + 1 : 1;
@@ -352,22 +382,22 @@ function validateTask(task) {
   if (!task.name?.trim()) return { valid: false, error: "Task name is required" };
   if (task.name.trim().length > 200) return { valid: false, error: "Task name is too long (max 200 characters)" };
   if (task.name.trim().length < 2) return { valid: false, error: "Task name is too short (min 2 characters)" };
-  
+
   // Start date validation
   if (!(task.start instanceof Date) || isNaN(task.start)) {
     return { valid: false, error: "Invalid start date" };
   }
-  
+
   // End date validation
   if (!(task.end instanceof Date) || isNaN(task.end)) {
     return { valid: false, error: "Invalid end date" };
   }
-  
+
   // Date range validation
   if (task.end < task.start) {
     return { valid: false, error: "End date must be after start date" };
   }
-  
+
   // Duration validation (reasonable limits)
   const duration = daysBetween(task.start, task.end);
   if (duration < 0) {
@@ -376,27 +406,27 @@ function validateTask(task) {
   if (duration > 3650) { // ~10 years
     return { valid: false, error: "Task duration is unreasonably long (max ~10 years)" };
   }
-  
+
   // Progress validation
   if (typeof task.progress !== 'number' || task.progress < 0 || task.progress > 100) {
     return { valid: false, error: "Progress must be between 0 and 100" };
   }
-  
+
   // Assigned to validation
   if (task.assignedTo && task.assignedTo.length > 100) {
     return { valid: false, error: "Assignee name is too long" };
   }
-  
+
   // Dependencies validation
   if (task.dependencies && !Array.isArray(task.dependencies)) {
     return { valid: false, error: "Invalid dependencies format" };
   }
-  
+
   // Check for circular dependencies
   if (task.dependencies && task.dependencies.includes(task.id)) {
     return { valid: false, error: "Task cannot depend on itself" };
   }
-  
+
   // Check for circular dependency chains
   if (task.dependencies && task.dependencies.length > 0) {
     const visited = new Set();
@@ -411,7 +441,7 @@ function validateTask(task) {
       }
       return false;
     };
-    
+
     for (const depId of task.dependencies) {
       visited.clear();
       if (isCircular(depId)) {
@@ -419,7 +449,7 @@ function validateTask(task) {
       }
     }
   }
-  
+
   return { valid: true };
 }
 
@@ -433,6 +463,7 @@ async function saveTasks() {
 
   isSaving = true;
   try {
+    reconcileStateAfterDeletion();
     if (!state.tasks || !Array.isArray(state.tasks)) {
       throw new Error('Invalid tasks data structure');
     }
@@ -462,6 +493,7 @@ async function saveTasks() {
       localStorage.setItem("gantt-card-locks", JSON.stringify(state.cardLocks || {}));
       localStorage.setItem("gantt-dynamic-kpis", JSON.stringify(state.dynamicKPIs || {}));
       localStorage.setItem("gantt-summary-title", JSON.stringify(state.summaryTitle || 'Project Summary'));
+      syncKPIProjectCache();
       console.log('[CLIENT saveTasks] Saved to localStorage');
     };
 
@@ -514,13 +546,9 @@ async function loadTasks() {
       state.cardLocks = savedState.cardLocks || {};
       state.dynamicKPIs = savedState.dynamicKPIs || {};
       state.summaryTitle = savedState.summaryTitle || 'Project Summary';
-      
-      // Clean orphaned data
-      state.tasks = state.tasks.filter(task => !task.projectId || state.projects.some(p => p.id === task.projectId));
-      state.tasks.forEach(task => {
-        task.dependencies = task.dependencies.filter(dep => state.tasks.some(t => t.id === dep));
-      });
-      
+
+      reconcileStateAfterDeletion();
+
       return true;
     }
 
@@ -550,12 +578,8 @@ async function loadTasks() {
       if (savedProjects) {
         state.projects = JSON.parse(savedProjects);
       }
-      
-      // Clean orphaned data
-      state.tasks = state.tasks.filter(task => !task.projectId || state.projects.some(p => p.id === task.projectId));
-      state.tasks.forEach(task => {
-        task.dependencies = task.dependencies.filter(dep => state.tasks.some(t => t.id === dep));
-      });
+
+      reconcileStateAfterDeletion();
 
       const sheetsSettings = localStorage.getItem("gantt-sheets-settings");
       if (sheetsSettings) {
@@ -581,6 +605,7 @@ async function loadTasks() {
       if (summaryTitle) {
         state.summaryTitle = JSON.parse(summaryTitle);
       }
+      reconcileStateAfterDeletion();
     } catch (storageError) {
       console.error('Load fallback error:', storageError);
       showNotification(`✗ Load failed: ${storageError.message}`, "error");
@@ -607,12 +632,12 @@ function renderTimeline() {
 function setGanttScale(scale) {
   if (!SCALE_CONFIG[scale]) return;
   state.scale = scale;
-  
+
   // Calculate dynamic timeline bounds
   const bounds = getTimelineBounds();
   state.timelineStart = 0;
   state.timelineEnd = bounds.daysTotal || 120;
-  
+
   updateGanttScaleButtons();
   renderTimeline();
   render();
@@ -627,7 +652,7 @@ function updateGanttScaleButtons() {
 function renderSmartMonthTimeline() {
   const config = SCALE_CONFIG.month;
   const bounds = getTimelineBounds();
-  
+
   // Calculate months from start to end date
   let monthsNeeded = 0;
   let current = new Date(bounds.start);
@@ -635,11 +660,11 @@ function renderSmartMonthTimeline() {
     monthsNeeded++;
     current.setMonth(current.getMonth() + 1);
   }
-  
+
   state.monthOffsets = calculateMonthOffsets(bounds.start, Math.max(monthsNeeded + 2, 36));
   const gridCols = state.monthOffsets.slice(0, -1).map(m => `${getDaysInMonth(m.date) * (config.cellWidth / 30)}px`).join(' ');
   DOM.timeline.style.gridTemplateColumns = gridCols;
-  
+
   state.monthOffsets.slice(0, -1).forEach(m => {
     const div = document.createElement("div");
     div.className = "timeline-cell month-header";
@@ -653,7 +678,7 @@ function renderStandardTimeline(config) {
   const displayCells = Math.min(120, state.timelineEnd - state.timelineStart);
   const bounds = getTimelineBounds();
   const timelineStart = bounds.start;
-  
+
   DOM.timeline.style.gridTemplateColumns = `repeat(${displayCells}, ${config.cellWidth}px)`;
   for (let i = state.timelineStart; i < state.timelineStart + displayCells; i++) {
     const d = addDays(timelineStart, config.step === 1 ? i : i * config.step);
@@ -675,7 +700,7 @@ function setupInfiniteScrollTimeline() {
 function renderTaskList() {
   DOM.taskList.innerHTML = "";
   const filter = DOM.taskFilter?.value.toLowerCase() || "";
-  
+
   if (state.tasks.length === 0) {
     DOM.taskList.innerHTML = '<div class="empty-state">No tasks yet. Create one to get started!</div>';
     return;
@@ -758,7 +783,7 @@ function renderTaskList() {
 function getDynamicKPIData(dataSource, calculation, column, filter) {
   const filteredTasks = getFilteredTasks();
   let filtered = filteredTasks;
-  
+
   // Apply filter
   if (filter === 'completed') {
     filtered = filtered.filter(t => (t.progress || 0) === 100);
@@ -768,9 +793,9 @@ function getDynamicKPIData(dataSource, calculation, column, filter) {
     const today = new Date();
     filtered = filtered.filter(t => t.end < today && (t.progress || 0) < 100);
   }
-  
+
   if (filtered.length === 0) return { value: 0, label: 'No data' };
-  
+
   // Apply calculation
   switch (calculation) {
     case 'count':
@@ -877,31 +902,31 @@ function renderDependencyLines() {
   svg.style.height = '100%';
   svg.style.pointerEvents = 'none';
   svg.style.zIndex = '1';
-  
+
   const config = SCALE_CONFIG[state.scale];
-  
+
   state.tasks.forEach(task => {
     if (!task.dependencies || task.dependencies.length === 0) return;
-    
+
     task.dependencies.forEach(depId => {
       const depTask = state.tasks.find(t => t.id === depId);
       if (!depTask) return;
-      
+
       // Get positions
-      const depSnap = state.scale === "month" 
+      const depSnap = state.scale === "month"
         ? calculateMonthPosition(depTask.start, depTask.end)
         : { startPos: daysBetween(PROJECT_START, depTask.start) * config.cellWidth, width: daysBetween(depTask.start, depTask.end) * config.cellWidth };
-      
+
       const depEndX = depSnap.startPos + depSnap.width;
       const depY = depTask.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-      
+
       const taskSnap = state.scale === "month"
         ? calculateMonthPosition(task.start, task.end)
         : { startPos: daysBetween(PROJECT_START, task.start) * config.cellWidth, width: daysBetween(task.start, task.end) * config.cellWidth };
-      
+
       const taskStartX = taskSnap.startPos;
       const taskY = task.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-      
+
       // Draw line from depTask end to task start
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       const midX = (depEndX + taskStartX) / 2;
@@ -911,7 +936,7 @@ function renderDependencyLines() {
       line.setAttribute('fill', 'none');
       line.setAttribute('stroke-dasharray', '5,5');
       svg.appendChild(line);
-      
+
       // Draw arrowhead
       const arrowSize = 8;
       const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -921,7 +946,7 @@ function renderDependencyLines() {
       svg.appendChild(arrow);
     });
   });
-  
+
   DOM.bars.insertBefore(svg, DOM.bars.firstChild);
 }
 
@@ -929,12 +954,12 @@ function calculateMonthPosition(startDate, endDate) {
   const config = SCALE_CONFIG.month;
   let startPos = 0;
   let endPos = 0;
-  
+
   // Find start position with proper month/day calculation
   for (let i = 0; i < state.monthOffsets.length - 1; i++) {
     const offset = state.monthOffsets[i];
     const nextOffset = state.monthOffsets[i + 1];
-    
+
     if (startDate >= offset.date && startDate < nextOffset.date) {
       const daysInMonth = getDaysInMonth(offset.date);
       const dayOfMonth = Math.max(1, startDate.getDate());
@@ -942,12 +967,12 @@ function calculateMonthPosition(startDate, endDate) {
       break;
     }
   }
-  
+
   // Find end position with proper month/day calculation
   for (let i = 0; i < state.monthOffsets.length - 1; i++) {
     const offset = state.monthOffsets[i];
     const nextOffset = state.monthOffsets[i + 1];
-    
+
     if (endDate > offset.date && endDate <= nextOffset.date) {
       const daysInMonth = getDaysInMonth(offset.date);
       const dayOfMonth = Math.min(endDate.getDate(), daysInMonth);
@@ -959,10 +984,10 @@ function calculateMonthPosition(startDate, endDate) {
       endPos = (offset.offset + daysInMonth) * (config.cellWidth / daysInMonth);
     }
   }
-  
-  return { 
-    startPos: Math.max(0, startPos), 
-    width: Math.max(40, endPos - startPos) 
+
+  return {
+    startPos: Math.max(0, startPos),
+    width: Math.max(40, endPos - startPos)
   };
 }
 
@@ -992,18 +1017,18 @@ function addDragHandler(bar, task) {
       document.removeEventListener("mouseup", handleDragEnd);
 
       const config = SCALE_CONFIG[state.scale];
-      task.start = state.scale === "month" 
+      task.start = state.scale === "month"
         ? addDays(PROJECT_START, Math.round(bar.offsetLeft / (config.cellWidth / 30)))
         : addDays(PROJECT_START, Math.round(bar.offsetLeft / config.cellWidth));
       task.end = addDays(task.start, daysBetween(task.start, task.end));
       task.row = Math.max(0, Math.round(bar.offsetTop / ROW_HEIGHT));
 
-      const snap = state.scale === "month" ? calculateMonthPosition(task.start, task.end) : 
+      const snap = state.scale === "month" ? calculateMonthPosition(task.start, task.end) :
         { startPos: daysBetween(PROJECT_START, task.start) * config.cellWidth, width: Math.max(daysBetween(task.start, task.end) * config.cellWidth, 40) };
-      
+
       bar.style.left = `${snap.startPos}px`;
       bar.style.top = `${task.row * ROW_HEIGHT}px`;
-      
+
       saveTasks(); renderTaskList();
     }
     document.addEventListener("mousemove", handleDragMove);
@@ -1043,10 +1068,10 @@ function addResizeHandler(bar, task) {
           task.end = addDays(PROJECT_START, Math.round((bar.offsetLeft + bar.offsetWidth) / config.cellWidth));
         }
 
-        const snap = state.scale === "month" ? calculateMonthPosition(task.start, task.end) : 
+        const snap = state.scale === "month" ? calculateMonthPosition(task.start, task.end) :
           { startPos: daysBetween(PROJECT_START, task.start) * config.cellWidth, width: Math.max(daysBetween(task.start, task.end) * config.cellWidth, 40) };
         bar.style.left = `${snap.startPos}px`; bar.style.width = `${snap.width}px`;
-        
+
         saveTasks(); renderTaskList();
       }
       document.addEventListener("mousemove", handleResizeMove);
@@ -1072,7 +1097,12 @@ function prepareImportData(csvText, source = 'CSV', sheetName = 'Data', projectN
 
 function isGoogleSheetsUrl(url) {
   if (!url || typeof url !== 'string') return false;
-  return /docs\.google\.com\/spreadsheets\/.+/.test(url);
+  try {
+    const parsed = new URL(url.trim());
+    return ['docs.google.com', 'spreadsheets.google.com'].includes(parsed.hostname) && /spreadsheets|feeds\/worksheets/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }
 
 async function loadGoogleSheetImport(url) {
@@ -1227,7 +1257,16 @@ function extractGoogleSheetInfo(url) {
   }
 
   const trimmedUrl = url.trim();
-  const parsed = new URL(trimmedUrl);
+  let parsed;
+  try {
+    parsed = new URL(trimmedUrl);
+  } catch {
+    throw new Error('Invalid Google Sheets URL');
+  }
+
+  if (!['docs.google.com', 'spreadsheets.google.com'].includes(parsed.hostname)) {
+    throw new Error('URL must be a Google Sheets link');
+  }
   const hasCsvExport = /(?:export\?format=csv|pub\?output=csv|output=csv)/i.test(parsed.pathname + parsed.search);
   const publishedMatch = parsed.pathname.match(/\/d\/e\/([a-zA-Z0-9-_]+)/);
   const standardMatch = parsed.pathname.match(/\/d\/(?!e\/)([a-zA-Z0-9-_]+)/);
@@ -1327,7 +1366,7 @@ async function fetchGoogleSheetCsv(url, gid = null, sheetName = null) {
 
 async function getGoogleSheetTabs(url) {
   const info = extractGoogleSheetInfo(url);
-  
+
   // Validate URL and warn if it looks like an unpublished Google Sheets URL
   if (!info.isPublishedCsv && url.includes('docs.google.com/spreadsheets/d/')) {
     const warningMsg = 'This looks like a regular Google Sheet (not published). Please:\n\n' +
@@ -1338,7 +1377,7 @@ async function getGoogleSheetTabs(url) {
       'Without publishing, the sheet cannot be imported.';
     showNotification(warningMsg, 'warning');
   }
-  
+
   if (info.isPublishedCsv) {
     return [{
       id: info.publishedId || 'published_csv',
@@ -1358,7 +1397,7 @@ async function getGoogleSheetTabs(url) {
     if (!response.ok) {
       const errorBody = await response.json().catch(() => null);
       const errorCode = errorBody?.code;
-      
+
       // Provide specific guidance for common errors
       if (errorCode === 'SHEET_NOT_PUBLISHED' || response.status === 404) {
         const detailMsg = 'Sheet not accessible. This usually means:\n\n' +
@@ -1372,7 +1411,7 @@ async function getGoogleSheetTabs(url) {
           '5. Paste it in the import dialog and try again';
         throw new Error(detailMsg);
       }
-      
+
       throw new Error(errorBody?.error || `Unable to retrieve sheet tabs: ${response.statusText}`);
     }
 
@@ -1419,16 +1458,16 @@ function renderGoogleSheetTabs(tabs) {
   if (list) list.innerHTML = rows;
   if (container) container.style.display = 'block';
   if (previewContainer) previewContainer.style.display = 'block';
-  
+
   const btn1 = document.getElementById('import-selected-tab-btn');
   const btn2 = document.getElementById('import-all-tabs-btn');
   if (btn1) btn1.style.display = 'inline-flex';
   if (btn2) btn2.style.display = isPublishedFallback ? 'none' : 'inline-flex';
-  
+
   const preview = document.getElementById('sheet-preview');
   if (preview) {
-    preview.innerHTML = isPublishedFallback 
-      ? '<p class="warning-text">Published CSV preview detected; tab selection is unavailable.</p>' 
+    preview.innerHTML = isPublishedFallback
+      ? '<p class="warning-text">Published CSV preview detected; tab selection is unavailable.</p>'
       : '<p>Select a tab to preview its first rows.</p>';
   }
 
@@ -1506,8 +1545,8 @@ async function importGoogleSheetTab() {
     showLoadingState('Importing selected tab...');
     const { results } = await fetchGoogleSheetCsv(state.sheetsUrl, selected.gid, selected.name);
     const imported = parseSheetRowsToTasks(results);
-    createOrUpdateSheetProject(state.sheetsUrl, selected.name, results.meta.fields || [], results.data || []);
-    applyImportedTasks(imported, `Imported ${selected.name}`);
+    const project = createOrUpdateSheetProject(state.sheetsUrl, selected.name, results.meta.fields || [], results.data || []);
+    applyImportedTasks(imported, `Imported ${selected.name}`, project);
   } catch (error) {
     showNotification(`✗ ${error.message}`, 'error');
   } finally {
@@ -1534,8 +1573,9 @@ async function importAllGoogleSheetTabs() {
     for (const tab of tabs) {
       try {
         const { results } = await fetchGoogleSheetCsv(state.sheetsUrl, tab.gid, tab.name);
-        createOrUpdateSheetProject(state.sheetsUrl, tab.name, results.meta.fields || [], results.data || []);
-        importedTasks.push(...parseSheetRowsToTasks(results));
+        const project = createOrUpdateSheetProject(state.sheetsUrl, tab.name, results.meta.fields || [], results.data || []);
+        const parsedTasks = parseSheetRowsToTasks(results).map(task => ({ ...task, projectId: project.id }));
+        importedTasks.push(...parsedTasks);
       } catch (err) {
         tabErrors.push(`${tab.name}: ${err.message}`);
       }
@@ -1638,7 +1678,7 @@ function parseSheetRowsToTasks(results) {
   }).filter(t => t !== null);
 }
 
-function applyImportedTasks(tasks, operationLabel) {
+function applyImportedTasks(tasks, operationLabel, targetProject = null) {
   if (!tasks || tasks.length === 0) {
     showNotification('⚠ No valid tasks found in the selected Google Sheet tab. Check column mapping and data formats.', 'info');
     return;
@@ -1656,12 +1696,10 @@ function applyImportedTasks(tasks, operationLabel) {
     return;
   }
 
-  // Create a project for this import if needed
-  let projectId = null;
-  if (state.currentProject) {
-    projectId = state.currentProject.id;
-  } else {
-    const importProject = {
+  // Create or reuse the target project for this import.
+  let project = targetProject || state.currentProject || null;
+  if (!project) {
+    project = {
       id: generateProjectId(),
       name: `Imported - ${new Date().toLocaleDateString()}`,
       description: `Tasks imported from ${operationLabel}`,
@@ -1669,30 +1707,67 @@ function applyImportedTasks(tasks, operationLabel) {
       created: new Date().toISOString(),
       sheets: []
     };
-    state.projects.push(importProject);
-    projectId = importProject.id;
+    state.projects.push(project);
   }
+  const projectId = project.id;
 
   // Assign projectId to all imported tasks
   uniqueTasks.forEach(task => {
-    task.projectId = projectId;
+    if (!task.projectId) task.projectId = projectId;
   });
 
   state.tasks.push(...uniqueTasks);
-  saveTasks();
-  refreshProjectSelector();
   resolveDependencies(); // Resolve task name references to IDs
-  PROJECT_START = getProjectStart();
-  calculateTaskRows();
+  reconcileStateAfterDeletion();
+  saveTasks();
   updateSpatialMarkers();
-  render();
-  renderTaskList();
-  renderTimeline();
+  refreshAllProjectViews();
   showNotification(`✓ ${uniqueTasks.length} tasks imported from ${operationLabel}`, 'success');
 }
 
 function getSheetProjectName(url, sheetName) {
   return sheetName || 'Imported Sheet';
+}
+
+function removeTaskFromProjectSheets(task) {
+  if (!task?.projectId) return;
+  const project = state.projects.find(p => String(p.id) === String(task.projectId));
+  if (!project || !Array.isArray(project.sheets)) return;
+
+  const toSafeDateKey = (value) => {
+    if (!value) return null;
+    const parsed = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : formatDate(parsed);
+  };
+  const taskName = String(task.name || '').trim().toLowerCase();
+  const taskStart = toSafeDateKey(task.start);
+  const taskEnd = toSafeDateKey(task.end);
+
+  project.sheets.forEach(sheet => {
+    if (!Array.isArray(sheet.data) || sheet.data.length === 0) return;
+    const headers = Array.isArray(sheet.headers) && sheet.headers.length ? sheet.headers : Object.keys(sheet.data[0] || {});
+    const mapping = aiMapColumns(headers);
+    const nameColumn = mapping.name?.column;
+    if (!nameColumn) return;
+
+    const startColumn = mapping.start?.column;
+    const endColumn = mapping.end?.column;
+    const beforeRows = sheet.data.length;
+    sheet.data = sheet.data.filter(row => {
+      const rowName = String(row?.[nameColumn] || '').trim().toLowerCase();
+      if (!rowName || rowName !== taskName) return true;
+
+      const rowStart = startColumn && row?.[startColumn] ? toSafeDateKey(row[startColumn]) : null;
+      const rowEnd = endColumn && row?.[endColumn] ? toSafeDateKey(row[endColumn]) : null;
+      const startMatches = !taskStart || !rowStart || rowStart === taskStart;
+      const endMatches = !taskEnd || !rowEnd || rowEnd === taskEnd;
+      return !(startMatches && endMatches);
+    });
+
+    if (sheet.data.length !== beforeRows) {
+      sheet.updated = new Date().toISOString();
+    }
+  });
 }
 
 function createOrUpdateSheetProject(source, sheetName, headers, rows) {
@@ -1711,13 +1786,19 @@ function createOrUpdateSheetProject(source, sheetName, headers, rows) {
   }
 
   project.sheets = project.sheets || [];
-  project.sheets.push({
-    id: generateSheetId(),
-    name: sheetName || 'Imported Sheet',
+  const normalizedSheetName = sheetName || 'Imported Sheet';
+  const existingSheet = project.sheets.find(sheet => sheet.name === normalizedSheetName);
+  const sheetPayload = {
+    id: existingSheet?.id || generateSheetId(),
+    name: normalizedSheetName,
     headers: headers || [],
     data: rows || [],
-    created: new Date().toISOString()
-  });
+    created: existingSheet?.created || new Date().toISOString(),
+    updated: new Date().toISOString()
+  };
+
+  if (existingSheet) Object.assign(existingSheet, sheetPayload);
+  else project.sheets.push(sheetPayload);
 
   saveTasks();
   renderProjectsView();
@@ -1740,15 +1821,15 @@ async function fetchFromGoogleSheets(url, gid = null) {
 function startGoogleSheetsPolling(url) {
   if (state.sheetsInterval) clearInterval(state.sheetsInterval);
   state.sheetsUrl = url;
-  
+
   const poll = () => {
     showLoadingState("Syncing from Google Sheets...");
     return fetchFromGoogleSheets(url, state.sheetsSelectedGid).finally(hideLoadingState);
   };
-  
+
   // First sync immediately using Promise instead of setTimeout
   Promise.resolve().then(poll);
-  
+
   // Then schedule recurring syncs every 5 minutes
   state.sheetsInterval = setInterval(poll, 5 * 60 * 1000);
   document.getElementById('sheets-status').style.display = 'block';
@@ -1762,57 +1843,98 @@ function stopGoogleSheetsPolling() {
 }
 
 // Wizard Modals
-function openImportWizard() { resetGoogleSheetWizardState(); state.importedData = null; state.columnMapping = {}; state.currentStep = 1; DOM.importModal.classList.remove("hidden"); goToStep(1); }
+function openImportWizard() {
+  resetGoogleSheetWizardState();
+  state.importedData = null;
+  state.columnMapping = {};
+  state.currentStep = 1;
+  DOM.importModal.classList.remove("hidden");
+  goToStep(1);
+}
 function closeImportWizard() { DOM.importModal.classList.add("hidden"); resetGoogleSheetWizardState(); state.importedData = null; state.columnMapping = {}; }
 
+function hasImportData() {
+  return Boolean(state.importedData && Array.isArray(state.importedData.headers) && Array.isArray(state.importedData.rows) && state.importedData.rows.length > 0);
+}
+
+function updateWizardControls() {
+  const backBtn = document.getElementById('wizard-back');
+  const nextBtn = document.getElementById('wizard-next');
+  const importBtn = document.getElementById('wizard-import');
+
+  if (backBtn) backBtn.disabled = state.currentStep <= 1;
+  if (nextBtn) {
+    nextBtn.classList.toggle('hidden', state.currentStep >= 4);
+    nextBtn.disabled = !hasImportData();
+  }
+  if (importBtn) {
+    importBtn.classList.toggle('hidden', state.currentStep !== 4);
+    importBtn.disabled = !hasImportData();
+  }
+}
+
 function goToStep(step) {
-  state.currentStep = step;
+  const targetStep = clampNumber(step, 1, 4, 1);
+  if (targetStep > 1 && !hasImportData()) {
+    showNotification('Upload a CSV or load a Google Sheet before continuing.', 'warning');
+    updateWizardControls();
+    return;
+  }
+
+  state.currentStep = targetStep;
   document.querySelectorAll(".wizard-step").forEach(s => s.classList.remove("active"));
-  document.querySelector(`.wizard-step[data-step="${step}"]`)?.classList.add("active");
-  document.querySelectorAll(".step").forEach((s, idx) => {
-    if (idx + 1 < step) s.classList.add("completed");
-    else if (idx + 1 === step) s.classList.add("active");
-    else s.classList.remove("active", "completed");
+  document.querySelector(`.wizard-step[data-step="${targetStep}"]`)?.classList.add("active");
+  document.querySelectorAll(".step").forEach((stepEl, idx) => {
+    stepEl.classList.toggle("completed", idx + 1 < targetStep);
+    stepEl.classList.toggle("active", idx + 1 === targetStep);
   });
-  if (step === 3) renderMapping();
-  if (step === 4) renderImportSummary();
+  if (targetStep === 2) renderPreview();
+  if (targetStep === 3) renderMapping();
+  if (targetStep === 4) renderImportSummary();
+  updateWizardControls();
 }
 
 function renderPreview() {
   const table = document.getElementById("preview-table");
-  let html = '<table><thead><tr>' + state.importedData.headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
-  state.importedData.rows.slice(0, 5).forEach(row => {
-    html += '<tr>' + state.importedData.headers.map(h => `<td>${row[h]}</td>`).join('') + '</tr>';
-  });
-  table.innerHTML = html + '</tbody></table>';
+  if (!table || !hasImportData()) return;
+  const headers = state.importedData.headers;
+  const previewRows = state.importedData.rows.slice(0, 10);
+  const html = '<table><thead><tr>' + headers.map(h => `<th>${sanitizeValue(h)}</th>`).join('') + '</tr></thead><tbody>' +
+    previewRows.map(row => '<tr>' + headers.map(h => `<td>${sanitizeValue(row[h])}</td>`).join('') + '</tr>').join('') +
+    '</tbody></table>';
+  table.innerHTML = html;
 }
 
 function renderMapping() {
   const container = document.getElementById("mapping-container");
-  container.innerHTML = ['name', 'start', 'end', 'progress', 'assignedTo', 'lat', 'lng'].map(field => `
+  if (!container || !hasImportData()) return;
+  const fields = ['name', 'start', 'end', 'progress', 'assignedTo', 'lat', 'lng'];
+  container.innerHTML = fields.map(field => `
     <div class="mapping-item">
-      <label>${field}</label>
+      <label for="map-${field}">${sanitizeValue(field)}</label>
       <select id="map-${field}">
         <option value="">-- Not mapped --</option>
-        ${state.importedData.headers.map(h => `<option value="${h}" ${state.columnMapping[field]?.column === h ? 'selected' : ''}>${h}</option>`).join('')}
+        ${state.importedData.headers.map(h => `<option value="${escapeAttribute(h)}" ${state.columnMapping[field]?.column === h ? 'selected' : ''}>${sanitizeValue(h)}</option>`).join('')}
       </select>
     </div>
   `).join('');
-  
-  ['name', 'start', 'end', 'progress', 'assignedTo', 'lat', 'lng'].forEach(field => {
-    document.getElementById(`map-${field}`).addEventListener('change', (e) => {
+
+  fields.forEach(field => {
+    document.getElementById(`map-${field}`)?.addEventListener('change', (e) => {
       state.columnMapping[field] = e.target.value ? { column: e.target.value } : null;
     });
   });
 }
 
 function renderImportSummary() {
-  const summaryLines = [
-    `Source: <strong>${sanitizeInput(state.importedData.source)}</strong>`,
-    `Sheet: <strong>${sanitizeInput(state.importedData.sheetName || 'Data')}</strong>`,
-    `Records: <strong>${state.importedData.rows.length}</strong>`
+  const container = document.getElementById("import-summary");
+  if (!container || !hasImportData()) return;
+  const summaryItems = [
+    ['Source', state.importedData.source],
+    ['Sheet', state.importedData.sheetName || 'Data'],
+    ['Records', state.importedData.rows.length]
   ];
-  document.getElementById("import-summary").innerHTML = summaryLines.map(line => `<p>${line}</p>`).join('');
+  container.innerHTML = summaryItems.map(([label, value]) => `<p>${sanitizeValue(label)}: <strong>${sanitizeValue(value)}</strong></p>`).join('');
 }
 
 function finalImport() {
@@ -1849,30 +1971,30 @@ function finalImport() {
       const key = `${String(t.name).trim().toLowerCase()}|${formatDate(start)}|${formatDate(end)}`;
       if (existingKeys.has(key)) return;
       existingKeys.add(key);
-      state.tasks.push({ 
-        id: generateTaskId(), 
-        ...t, 
-        start, 
-        end, 
-        class: 'blue', 
+      state.tasks.push({
+        id: generateTaskId(),
+        ...t,
+        start,
+        end,
+        class: 'blue',
         assignedTo: String(t.assignedTo || '').trim(),
         dependencies: []
       });
       imported++;
     });
 
-    saveTasks(); 
+    saveTasks();
     if (typeof KPIModals !== 'undefined' && typeof KPIModals.refresh === 'function') {
       KPIModals.refresh();
     }
     PROJECT_START = getProjectStart();
     calculateTaskRows();
-    render(); 
-    renderTaskList(); 
+    render();
+    renderTaskList();
     renderTimeline();
     renderProjectsView();
-    closeImportWizard(); 
-    hideLoadingState(); 
+    closeImportWizard();
+    hideLoadingState();
     showNotification(`✓ Imported ${imported} tasks successfully`, "success");
   } catch (error) {
     hideLoadingState();
@@ -1942,6 +2064,128 @@ function hideMapPlaceholder() {
   }
 }
 
+function getValidProjectIdSet() {
+  return new Set((state.projects || []).map(project => String(project.id)));
+}
+
+function getValidTaskIdSet() {
+  return new Set((state.tasks || []).map(task => String(task.id)));
+}
+
+function cardBelongsToRemovedProject(card, removedProjectIds) {
+  if (!card || removedProjectIds.size === 0) return false;
+  const projectRef = card.project ?? card.projectId ?? card.filterProjectId;
+  return projectRef !== undefined && projectRef !== null && removedProjectIds.has(String(projectRef));
+}
+
+function escapeCssIdentifier(value) {
+  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}
+
+function removeSummaryCardElement(cardId) {
+  if (!cardId) return;
+  const card = document.querySelector(`[data-card-id="${escapeCssIdentifier(cardId)}"]`);
+  const gridItem = card?.closest('.grid-stack-item');
+  if (gridItem) gridItem.remove();
+}
+
+function pruneKPIState(removedProjectIds = new Set(), removedCardIds = new Set()) {
+  if (!state.dynamicKPIs || typeof state.dynamicKPIs !== 'object') state.dynamicKPIs = {};
+  const prunedCardIds = new Set([...removedCardIds].map(String));
+
+  Object.entries(state.dynamicKPIs).forEach(([cardId, card]) => {
+    if (removedCardIds.has(String(cardId)) || cardBelongsToRemovedProject(card, removedProjectIds)) {
+      delete state.dynamicKPIs[cardId];
+      prunedCardIds.add(String(cardId));
+      removeSummaryCardElement(cardId);
+    }
+  });
+
+  if (!state.cardLocks || typeof state.cardLocks !== 'object') state.cardLocks = {};
+  Object.keys(state.cardLocks).forEach(cardId => {
+    if (prunedCardIds.has(String(cardId))) {
+      delete state.cardLocks[cardId];
+    }
+  });
+
+  try {
+    if (typeof KPIModals !== 'undefined') {
+      if (Array.isArray(KPIModals.kpiCards)) {
+        KPIModals.kpiCards = KPIModals.kpiCards.filter(card =>
+          !prunedCardIds.has(String(card.id)) && !cardBelongsToRemovedProject(card, removedProjectIds)
+        );
+        KPIModals.saveCards?.();
+      }
+      KPIModals.refresh?.();
+    }
+  } catch (error) {
+    console.warn('Unable to prune KPI modal cache:', error);
+  }
+}
+
+function syncKPIProjectCache() {
+  try {
+    if (typeof KPIModals !== 'undefined') {
+      KPIModals.loadProjects?.();
+      KPIModals.saveProjects?.();
+      KPIModals.populateProjectSelects?.();
+    } else {
+      localStorage.setItem('kpi-projects', JSON.stringify({ projects: state.projects || [], fields: {} }));
+    }
+  } catch (error) {
+    console.warn('Unable to sync KPI project cache:', error);
+  }
+}
+
+function reconcileStateAfterDeletion({ removedProjectIds = [], removedTaskIds = [], removedCardIds = [] } = {}) {
+  const removedProjects = new Set(removedProjectIds.map(String));
+  const removedTasks = new Set(removedTaskIds.map(String));
+  const removedCards = new Set(removedCardIds.map(String));
+  const projectIds = getValidProjectIdSet();
+
+  const beforeTaskIds = new Set((state.tasks || []).map(task => String(task.id)));
+  state.tasks = (state.tasks || []).filter(task => {
+    if (removedTasks.has(String(task.id))) return false;
+    return !task.projectId || projectIds.has(String(task.projectId));
+  });
+
+  const currentTaskIds = getValidTaskIdSet();
+  beforeTaskIds.forEach(taskId => {
+    if (!currentTaskIds.has(taskId)) removedTasks.add(taskId);
+  });
+
+  state.tasks.forEach(task => {
+    task.dependencies = Array.isArray(task.dependencies)
+      ? [...new Set(task.dependencies)].filter(dep => currentTaskIds.has(String(dep)) && String(dep) !== String(task.id))
+      : [];
+  });
+
+  if (state.selectedTask && !currentTaskIds.has(String(state.selectedTask.id))) {
+    state.selectedTask = null;
+  }
+  if (state.filterProjectId && !projectIds.has(String(state.filterProjectId))) {
+    state.filterProjectId = null;
+  }
+
+  pruneKPIState(removedProjects, removedCards);
+  syncKPIProjectCache();
+}
+
+function refreshAllProjectViews() {
+  refreshProjectSelector();
+  calculateTaskRows();
+  PROJECT_START = getProjectStart();
+  renderTimeline();
+  render();
+  renderTaskList();
+  updateSummaryKPIs();
+  renderStatusChart();
+  renderProjectsView();
+  renderTeamView();
+  setupDynamicChartBuilder();
+}
+
 function getFilteredTasks() {
   if (!state.filterProjectId) return state.tasks;
   return state.tasks.filter(task => task.projectId === state.filterProjectId);
@@ -1961,89 +2205,94 @@ function setProjectFilter(projectId) {
   renderTeamView();
 }
 
+function buildProjectOptions(selectedValue = '') {
+  const projectOptions = state.projects && state.projects.length > 0 ? state.projects : [];
+  return '<option value="">All Projects</option>' +
+    projectOptions.map(p => `<option value="${escapeAttribute(p.id)}" ${String(selectedValue) === String(p.id) ? 'selected' : ''}>${sanitizeValue(p.name)}</option>`).join('');
+}
+
 function refreshProjectSelector() {
-  const projectSelect = document.getElementById('chart-project-select');
-  if (projectSelect) {
-    const currentValue = projectSelect.value;
-    const projectOptions = state.projects && state.projects.length > 0 ? state.projects : [];
-    
-    projectSelect.innerHTML = '<option value="">All Projects</option>' +
-      projectOptions.map(p => `<option value="${p.id}">${sanitizeInput(p.name)}</option>`).join('');
-    
+  const validProjectIds = getValidProjectIdSet();
+  const selectors = [
+    document.getElementById('chart-project-select'),
+    document.getElementById('kpi-project-select')
+  ].filter(Boolean);
+
+  selectors.forEach(projectSelect => {
+    const currentValue = validProjectIds.has(String(projectSelect.value)) ? projectSelect.value : '';
+    projectSelect.innerHTML = buildProjectOptions(currentValue);
     projectSelect.value = currentValue;
+  });
+
+  if (state.filterProjectId && !validProjectIds.has(String(state.filterProjectId))) {
+    state.filterProjectId = null;
   }
 }
 
 function setupDynamicChartBuilder() {
-  // Populate project selector with all projects
   const projectSelect = document.getElementById('chart-project-select');
   if (projectSelect) {
-    const projectOptions = state.projects && state.projects.length > 0 ? state.projects : [];
-    
-    projectSelect.innerHTML = '<option value="">All Projects</option>' +
-      projectOptions.map(p => `<option value="${p.id}">${sanitizeInput(p.name)}</option>`).join('');
-  }
-  
-  // Setup event listeners
-  document.getElementById('chart-project-select')?.addEventListener('change', (e) => {
-    const projectId = e.target.value || null;
-    // Apply project filter to all views
-    state.filterProjectId = projectId;
-    updateSummaryKPIs();
-    renderStatusChart();
-    renderTeamView();
-    // Update dynamic chart with selected chart type
-    const chartType = document.getElementById('chart-type-select')?.value || 'bar';
-    renderDynamicChart(projectId, chartType);
-  });
-  
-  document.getElementById('chart-type-select')?.addEventListener('change', (e) => {
-    // Re-render dynamic chart with new type but same project filter
-    const projectId = document.getElementById('chart-project-select')?.value || null;
-    const chartType = e.target.value || 'bar';
-    renderDynamicChart(projectId, chartType);
-  });
-  document.getElementById('chart-project-select')?.addEventListener('change', (e) => {
-    const projectId = e.target.value || null;
-    state.filterProjectId = projectId;
-    
-    // NEW: Use the fade wrapper
-    updateDashboardWithFade(() => {
+    const currentValue = getValidProjectIdSet().has(String(projectSelect.value)) ? projectSelect.value : '';
+    projectSelect.innerHTML = buildProjectOptions(currentValue);
+    projectSelect.value = currentValue;
+    projectSelect.onchange = (e) => {
+      const projectId = e.target.value || null;
+      state.filterProjectId = projectId;
+      updateDashboardWithFade(() => {
         updateSummaryKPIs();
         renderStatusChart();
         renderTeamView();
         const chartType = document.getElementById('chart-type-select')?.value || 'bar';
         renderDynamicChart(projectId, chartType);
-    });
-  });
-  
-  // Remove the old update button listener if it exists
-  document.getElementById('update-chart-btn')?.removeEventListener('click', null);
-  document.getElementById('update-chart-btn')?.addEventListener('click', () => {
-    const projectId = document.getElementById('chart-project-select')?.value || null;
-    const chartType = document.getElementById('chart-type-select')?.value || 'bar';
-    renderDynamicChart(projectId, chartType);
-  });
+      });
+    };
+  }
+
+  const kpiProjectSelect = document.getElementById('kpi-project-select');
+  if (kpiProjectSelect) {
+    const currentValue = getValidProjectIdSet().has(String(kpiProjectSelect.value)) ? kpiProjectSelect.value : '';
+    kpiProjectSelect.innerHTML = buildProjectOptions(currentValue);
+    kpiProjectSelect.value = currentValue;
+    kpiProjectSelect.onchange = (e) => setProjectFilter(e.target.value || null);
+  }
+
+  const chartTypeSelect = document.getElementById('chart-type-select');
+  if (chartTypeSelect) {
+    chartTypeSelect.onchange = (e) => {
+      const projectId = document.getElementById('chart-project-select')?.value || null;
+      const chartType = e.target.value || 'bar';
+      renderDynamicChart(projectId, chartType);
+    };
+  }
+
+  const updateBtn = document.getElementById('update-chart-btn');
+  if (updateBtn) {
+    updateBtn.onclick = () => {
+      const projectId = document.getElementById('chart-project-select')?.value || null;
+      const chartType = document.getElementById('chart-type-select')?.value || 'bar';
+      renderDynamicChart(projectId, chartType);
+    };
+  }
 }
 
 function renderDynamicChart(projectId, chartType) {
-  const filteredTasks = projectId ? 
-    state.tasks.filter(t => t.projectId === projectId) : 
+  const filteredTasks = projectId ?
+    state.tasks.filter(t => t.projectId === projectId) :
     state.tasks;
-  
+
   if (filteredTasks.length === 0) {
     showNotification('No tasks available for selected project', 'warning');
     return;
   }
-  
+
   const canvas = document.getElementById('summary-custom-chart');
   if (!canvas || typeof Chart === 'undefined') return;
-  
+
   if (window.dynamicChart) window.dynamicChart.destroy();
-  
+
   const colors = getChartColors();
   let chartConfig = {};
-  
+
   switch (chartType) {
     case 'bar':
       // Bar Chart: Individual task progress
@@ -2076,13 +2325,13 @@ function renderDynamicChart(projectId, chartType) {
         }
       };
       break;
-      
+
     case 'donut':
       // Donut Chart: Overall status distribution
       const notStarted = filteredTasks.filter(t => (t.progress || 0) === 0).length;
       const inProgress = filteredTasks.filter(t => (t.progress || 0) > 0 && (t.progress || 0) < 100).length;
       const completed = filteredTasks.filter(t => (t.progress || 0) === 100).length;
-      
+
       chartConfig = {
         type: 'doughnut',
         data: {
@@ -2104,7 +2353,7 @@ function renderDynamicChart(projectId, chartType) {
         }
       };
       break;
-      
+
     case 'line':
       // Line Chart: Progress over time
       const dateTaskMap = {};
@@ -2115,12 +2364,12 @@ function renderDynamicChart(projectId, chartType) {
           dateTaskMap[date].push(task.progress || 0);
         });
       });
-      
+
       const sortedDates = Object.keys(dateTaskMap).sort();
       const avgProgressByDate = sortedDates.map(date =>
         Math.round(dateTaskMap[date].reduce((a, b) => a + b, 0) / dateTaskMap[date].length)
       );
-      
+
       chartConfig = {
         type: 'line',
         data: {
@@ -2154,7 +2403,7 @@ function renderDynamicChart(projectId, chartType) {
       const pieNotStarted = filteredTasks.filter(t => (t.progress || 0) === 0).length;
       const pieInProgress = filteredTasks.filter(t => (t.progress || 0) > 0 && (t.progress || 0) < 100).length;
       const pieCompleted = filteredTasks.filter(t => (t.progress || 0) === 100).length;
-      
+
       chartConfig = {
         type: 'pie',
         data: {
@@ -2188,13 +2437,13 @@ function renderDynamicChart(projectId, chartType) {
           dateMetrics[date].progress += (task.progress || 0);
         });
       });
-      
+
       const areaDatesSorted = Object.keys(dateMetrics).sort();
       const taskCountsData = areaDatesSorted.map(date => dateMetrics[date].count);
       const avgProgressData = areaDatesSorted.map(date =>
         Math.round(dateMetrics[date].progress / dateMetrics[date].count)
       );
-      
+
       chartConfig = {
         type: 'line',
         data: {
@@ -2264,7 +2513,7 @@ function renderDynamicChart(projectId, chartType) {
           completed: tasksWithPriority.filter(t => (t.progress || 0) === 100).length
         };
       });
-      
+
       chartConfig = {
         type: 'radar',
         data: {
@@ -2314,7 +2563,7 @@ function renderDynamicChart(projectId, chartType) {
         y: task.progress || 0,
         label: sanitizeInput(task.name)
       })).slice(0, 30);
-      
+
       chartConfig = {
         type: 'scatter',
         data: {
@@ -2360,14 +2609,14 @@ function renderDynamicChart(projectId, chartType) {
       };
       break;
   }
-  
+
   // Apply theme-aware colors to chart config
   applyThemeToChartConfig(chartConfig, colors);
-  
+
   const chartInstance = new Chart(canvas, chartConfig);
   window.dynamicChart = chartInstance;
   canvas.chart = chartInstance;
-  document.getElementById('summary-custom-chart-title').textContent = 
+  document.getElementById('summary-custom-chart-title').textContent =
     `Dynamic Chart (${chartType.charAt(0).toUpperCase() + chartType.slice(1)})`;
 }
 
@@ -2375,21 +2624,21 @@ function getDatesInRange(startDate, endDate) {
   const dates = [];
   const current = new Date(startDate);
   const end = new Date(endDate);
-  
+
   while (current <= end) {
     dates.push(formatDate(current));
     current.setDate(current.getDate() + 1);
   }
-  
+
   return dates;
 }
 
 function parseDependencies(depStr) {
   if (!depStr || typeof depStr !== 'string') return [];
-  
+
   // Split by comma or semicolon, trim whitespace
   const depArray = depStr.split(/[,;]/);
-  
+
   // Filter out empty strings and convert to numbers where possible
   return depArray
     .map(dep => {
@@ -2406,13 +2655,13 @@ function resolveDependencies() {
   state.tasks.forEach(task => {
     taskNameMap[task.name.toLowerCase()] = task.id;
   });
-  
+
   state.tasks.forEach(task => {
     if (!task.dependencies || task.dependencies.length === 0) return;
-    
+
     task.dependencies = task.dependencies.map(dep => {
       if (typeof dep === 'number') return dep;
-      
+
       // Try to find task by name
       const normalizedDep = String(dep).toLowerCase().trim();
       return taskNameMap[normalizedDep] || dep;
@@ -2428,17 +2677,17 @@ const ThemeManager = {
   STORAGE_KEY: 'gantt-theme-preference',
   LIGHT_THEME: 'light-theme',
   DARK_THEME: 'dark-theme',
-  
+
   init() {
     const savedTheme = localStorage.getItem(this.STORAGE_KEY);
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initialTheme = savedTheme || (prefersDark ? this.DARK_THEME : this.LIGHT_THEME);
     this.setTheme(initialTheme);
   },
-  
+
   setTheme(theme) {
     const root = document.documentElement;
-    
+
     if (theme === this.LIGHT_THEME) {
       root.classList.add(this.LIGHT_THEME);
       localStorage.setItem(this.STORAGE_KEY, this.LIGHT_THEME);
@@ -2450,17 +2699,17 @@ const ThemeManager = {
       document.getElementById('theme-toggle-btn').textContent = '☀️';
       document.getElementById('theme-toggle-btn').title = 'Switch to light mode';
     }
-    
+
     // Update charts to reflect new theme
     this.updateCharts();
   },
-  
+
   toggle() {
     const root = document.documentElement;
     const isLight = root.classList.contains(this.LIGHT_THEME);
     this.setTheme(isLight ? this.DARK_THEME : this.LIGHT_THEME);
   },
-  
+
   updateCharts() {
     // Redraw charts when theme changes
     setTimeout(async () => {
@@ -2483,7 +2732,7 @@ const StateManager = {
   addTask(taskData) {
     const validation = validateTask(taskData);
     if (!validation.valid) return { success: false, error: validation.error };
-    
+
     const newTask = {
       id: generateTaskId(),
       ...taskData,
@@ -2491,55 +2740,50 @@ const StateManager = {
       dependencies: taskData.dependencies || [],
       projectId: taskData.projectId || null
     };
-    
+
     state.tasks.push(newTask);
     calculateTaskRows();
     saveTasks();
     renderTaskList();
     render();
-    
+
     return { success: true, task: newTask };
   },
-  
+
   // Update existing task
   updateTask(taskId, updates) {
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return { success: false, error: 'Task not found' };
-    
+
     const updated = { ...task, ...updates };
     const validation = validateTask(updated);
     if (!validation.valid) return { success: false, error: validation.error };
-    
+
     Object.assign(task, updates);
     calculateTaskRows();
     saveTasks();
     renderTaskList();
     render();
-    
+
     return { success: true, task };
   },
-  
+
   // Delete task
   deleteTask(taskId) {
     const index = state.tasks.findIndex(t => t.id === taskId);
     if (index === -1) return { success: false, error: 'Task not found' };
-    
+
     const deleted = state.tasks[index];
+    removeTaskFromProjectSheets(deleted);
     state.tasks.splice(index, 1);
-    
-    // Remove this task from dependencies of other tasks
-    state.tasks.forEach(task => {
-      task.dependencies = task.dependencies.filter(dep => dep !== taskId);
-    });
-    
-    calculateTaskRows();
+    reconcileStateAfterDeletion({ removedTaskIds: [taskId] });
+
     saveTasks();
-    renderTaskList();
-    render();
-    
+    refreshAllProjectViews();
+
     return { success: true, task: deleted };
   },
-  
+
   // Add project
   addProject(projectData) {
     const project = {
@@ -2550,64 +2794,49 @@ const StateManager = {
       created: new Date().toISOString(),
       sheets: []
     };
-    
+
     state.projects.push(project);
     saveTasks();
     renderProjectsView();
-    
+
     return { success: true, project };
   },
-  
+
   // Update project
   updateProject(projectId, updates) {
     const project = state.projects.find(p => p.id === projectId);
     if (!project) return { success: false, error: 'Project not found' };
-    
+
     Object.assign(project, updates);
     saveTasks();
     renderProjectsView();
-    
+
     return { success: true, project };
   },
-  
+
   // Delete project
   deleteProject(projectId) {
     const index = state.projects.findIndex(p => p.id === projectId);
     if (index === -1) return { success: false, error: 'Project not found' };
-    
+
     const deleted = state.projects[index];
-    
-    // Remove tasks associated with this project
-    const deletedTaskIds = state.tasks.filter(t => t.projectId === projectId).map(t => t.id);
-    state.tasks = state.tasks.filter(t => t.projectId !== projectId);
-    
-    // Remove dependencies to deleted tasks
-    state.tasks.forEach(task => {
-      task.dependencies = task.dependencies.filter(dep => !deletedTaskIds.includes(dep));
-    });
+
+    // Remove tasks associated with this project and all stale cross-page references.
+    const deletedTaskIds = state.tasks.filter(t => String(t.projectId) === String(projectId)).map(t => t.id);
+    state.tasks = state.tasks.filter(t => String(t.projectId) !== String(projectId));
     state.projects.splice(index, 1);
-    
-    // Clear filter if it was the deleted project
-    if (state.filterProjectId === projectId) {
-      state.filterProjectId = null;
-    }
-    
-    calculateTaskRows();
+    reconcileStateAfterDeletion({ removedProjectIds: [projectId], removedTaskIds: deletedTaskIds });
+
     saveTasks();
-    renderProjectsView();
-    renderTaskList();
-    render();
-    updateSummaryKPIs();
-    setupDynamicChartBuilder();
-    renderTeamView();
-    
+    refreshAllProjectViews();
+
     return { success: true, project: deleted };
   },
-  
+
   // Batch update tasks
   batchUpdateTasks(taskIds, updates) {
     const updated = [];
-    
+
     taskIds.forEach(id => {
       const task = state.tasks.find(t => t.id === id);
       if (task) {
@@ -2619,45 +2848,45 @@ const StateManager = {
         }
       }
     });
-    
+
     if (updated.length > 0) {
       calculateTaskRows();
       saveTasks();
       renderTaskList();
       render();
     }
-    
+
     return { success: updated.length > 0, updated, skipped: taskIds.length - updated.length };
   },
-  
+
   // Get filtered tasks with optional filters
   getFilteredTasks(filters = {}) {
     let tasks = [...state.tasks];
-    
+
     if (filters.projectId) {
       tasks = tasks.filter(t => t.projectId === filters.projectId);
     }
-    
+
     if (filters.assignedTo) {
       tasks = tasks.filter(t => t.assignedTo === filters.assignedTo);
     }
-    
+
     if (filters.minProgress !== undefined) {
       tasks = tasks.filter(t => (t.progress || 0) >= filters.minProgress);
     }
-    
+
     if (filters.maxProgress !== undefined) {
       tasks = tasks.filter(t => (t.progress || 0) <= filters.maxProgress);
     }
-    
+
     if (filters.startBefore) {
       tasks = tasks.filter(t => t.start < filters.startBefore);
     }
-    
+
     if (filters.endAfter) {
       tasks = tasks.filter(t => t.end > filters.endAfter);
     }
-    
+
     return tasks;
   }
 };
@@ -2665,7 +2894,7 @@ const StateManager = {
 function getChartColors() {
   const style = getComputedStyle(document.documentElement);
   const isLight = document.documentElement.classList.contains('light-theme');
-  
+
   return {
     red: isLight ? '#ef4444' : '#f87171',
     yellow: isLight ? '#f59e0b' : '#fbbf24',
@@ -2682,7 +2911,7 @@ function getChartColors() {
 
 function applyThemeToChartConfig(chartConfig, colors) {
   if (!chartConfig.options) chartConfig.options = {};
-  
+
   // Apply theme colors to all chart options
   chartConfig.options.plugins = {
     ...chartConfig.options.plugins,
@@ -2698,7 +2927,7 @@ function applyThemeToChartConfig(chartConfig, colors) {
       color: colors.text
     }
   };
-  
+
   // Apply theme to scales
   if (chartConfig.options.scales) {
     Object.keys(chartConfig.options.scales).forEach(scaleKey => {
@@ -2725,27 +2954,27 @@ function renderStatusChart() {
   const ctx = document.getElementById('status-chart');
   if (!ctx || typeof Chart === 'undefined') return;
   if (window.statusChart) window.statusChart.destroy();
-  
+
   const filteredTasks = getFilteredTasks();
   const notStarted = filteredTasks.filter(t => (t.progress || 0) === 0).length;
   const inProgress = filteredTasks.filter(t => (t.progress || 0) > 0 && (t.progress || 0) < 100).length;
   const completed = filteredTasks.filter(t => (t.progress || 0) === 100).length;
-  
+
   const colors = getChartColors();
 
   window.statusChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: ['Not Started', 'In Progress', 'Completed'],
-      datasets: [{ 
-        data: [notStarted, inProgress, completed], 
-        backgroundColor: [colors.red, colors.yellow, colors.green], 
+      datasets: [{
+        data: [notStarted, inProgress, completed],
+        backgroundColor: [colors.red, colors.yellow, colors.green],
         borderWidth: 0,
         borderColor: colors.border
       }]
     },
-    options: { 
-      responsive: true, 
+    options: {
+      responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
@@ -2764,7 +2993,7 @@ function renderStatusChart() {
 function renderTeamView() {
   const teamContainer = document.getElementById('team-workload');
   if (!teamContainer) return;
-  
+
   const teamMembers = {};
   const filteredTasks = getFilteredTasks();
   filteredTasks.forEach(task => {
@@ -2774,10 +3003,16 @@ function renderTeamView() {
     teamMembers[assignee].progress += task.progress || 0;
     if ((task.progress || 0) === 100) teamMembers[assignee].completed++;
   });
-  
-  teamContainer.innerHTML = Object.values(teamMembers).map(m => `
+
+  const members = Object.values(teamMembers);
+  if (members.length === 0) {
+    teamContainer.innerHTML = '<div class="empty-state">No team workload yet. Assign tasks to team members to populate this view.</div>';
+    return;
+  }
+
+  teamContainer.innerHTML = members.map(m => `
     <div class="team-member-card">
-      <div class="team-member-name">${m.name}</div>
+      <div class="team-member-name">${sanitizeValue(m.name)}</div>
       <div class="team-member-stats">
         <div class="team-stat"><span class="team-stat-label">Total Tasks:</span><span class="team-stat-value">${m.total}</span></div>
         <div class="team-stat"><span class="team-stat-label">Completed:</span><span class="team-stat-value">${m.completed}</span></div>
@@ -2790,31 +3025,43 @@ function renderTeamView() {
 function renderProjectsView() {
   const container = document.getElementById('projects-grid');
   if (!container) return;
+  if (!state.projects.length) {
+    container.innerHTML = '<div class="empty-state">No projects yet. Create a project or import project data to get started.</div>';
+    return;
+  }
+
   container.innerHTML = state.projects.map(p => `
-    <div class="project-card" data-project-id="${p.id}">
+    <div class="project-card" data-project-id="${escapeAttribute(p.id)}" tabindex="0" role="button" aria-label="Open ${escapeAttribute(p.name || 'project')}">
       <div class="project-card-content">
-        <h3 class="project-card-name">${sanitizeInput(p.name)}</h3>
-        <p class="project-card-source">📁 ${sanitizeInput(p.source)}</p>
+        <h3 class="project-card-name">${sanitizeValue(p.name)}</h3>
+        <p class="project-card-source">📁 ${sanitizeValue(p.source)}</p>
         <p class="project-card-sheets">📊 ${p.sheets?.length || 0} sheet${p.sheets?.length !== 1 ? 's' : ''}</p>
-        <p class="project-card-date">📅 ${new Date(p.created).toLocaleDateString()}</p>
+        <p class="project-card-date">📅 ${p.created ? new Date(p.created).toLocaleDateString() : 'Unknown date'}</p>
       </div>
       <div class="project-card-actions">
-        <button class="btn-small btn-primary project-edit-btn" data-project-id="${p.id}">Edit</button>
+        <button class="btn-small btn-primary project-edit-btn" type="button" data-project-id="${escapeAttribute(p.id)}">Edit</button>
       </div>
     </div>
   `).join('');
-  
-  // Add click handlers
+
+  // Add click and keyboard handlers
   document.querySelectorAll('.project-card').forEach(card => {
+    const openCard = () => {
+      const projectId = card.dataset.projectId;
+      const project = state.projects.find(p => p.id === projectId);
+      if (project) openProjectModal(project);
+    };
     card.addEventListener('click', (e) => {
-      if (!e.target.closest('.project-edit-btn')) {
-        const projectId = card.dataset.projectId;
-        const project = state.projects.find(p => p.id === projectId);
-        if (project) openProjectModal(project);
+      if (!e.target.closest('.project-edit-btn')) openCard();
+    });
+    card.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.project-edit-btn')) {
+        e.preventDefault();
+        openCard();
       }
     });
   });
-  
+
   document.querySelectorAll('.project-edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2841,7 +3088,7 @@ function editTask(task) {
   document.getElementById("task-progress").value = task.progress || 0;
   document.getElementById("task-assignee").value = task.assignedTo || "";
   document.getElementById("task-form").dataset.editingTaskId = task.id;
-  
+
   populateDependenciesSelect(task.dependencies || []);
   DOM.taskModal.classList.remove("hidden");
 }
@@ -2849,7 +3096,7 @@ function editTask(task) {
 function populateDependenciesSelect(selectedIds = []) {
   const select = document.getElementById("task-depends");
   const currentTaskId = parseInt(document.getElementById("task-form").dataset.editingTaskId) || null;
-  
+
   select.innerHTML = state.tasks
     .filter(t => currentTaskId === null || t.id !== currentTaskId)
     .map(t => `
@@ -2866,12 +3113,13 @@ function removeCard(cardId) {
     showNotification('⚠️ Cannot remove this core card', 'warning');
     return;
   }
-  
+
   const gridItem = document.querySelector(`[data-card-id="${cardId}"]`)?.closest('.grid-stack-item');
   if (!gridItem) return;
-  
+
   if (confirm('Are you sure you want to remove this card?')) {
     gridItem.remove();
+    reconcileStateAfterDeletion({ removedCardIds: [cardId] });
     saveTasks();
     showNotification('✓ Card removed', 'success');
   }
@@ -2881,12 +3129,12 @@ function toggleCardLock(cardId) {
   const lockBtn = document.querySelector(`.card-lock-btn[data-card-id="${cardId}"]`);
   const card = document.querySelector(`[data-card-id="${cardId}"]`);
   const gridItem = card?.closest('.grid-stack-item');
-  
+
   if (!lockBtn || !gridItem) return;
-  
+
   const isLocked = state.cardLocks[cardId] || false;
   state.cardLocks[cardId] = !isLocked;
-  
+
   if (!isLocked) {
     gridItem.classList.add('gs-locked');
     lockBtn.textContent = '🔒';
@@ -2896,14 +3144,14 @@ function toggleCardLock(cardId) {
     lockBtn.textContent = '🔓';
     showNotification('🔓 Card unlocked', 'info');
   }
-  
+
   saveTasks();
 }
 
 function editSummaryTitle() {
   const titleEl = document.getElementById('summary-title');
   const currentTitle = titleEl?.textContent || 'Project Summary';
-  
+
   const newTitle = prompt('Enter new title:', currentTitle);
   if (newTitle && newTitle.trim()) {
     const sanitized = sanitizeInput(newTitle);
@@ -2917,18 +3165,18 @@ function editSummaryTitle() {
 function openCreateKPIModal(cardType = 'value') {
   const modal = document.getElementById('create-kpi-modal');
   if (!modal) return;
-  
+
   // Reset form
   document.getElementById('kpi-form')?.reset();
   document.getElementById('kpi-preview')?.style?.setProperty('display', 'none');
-  
+
   // Set the card type
   const typeSelect = document.getElementById('kpi-card-type');
   if (typeSelect) {
     typeSelect.value = cardType;
     typeSelect.dispatchEvent(new Event('change'));
   }
-  
+
   // Show/hide relevant sections based on card type
   updateModalForCardType(cardType);
   modal.classList.remove('hidden');
@@ -2939,7 +3187,7 @@ function updateModalForCardType(cardType) {
   const columnGroup = document.getElementById('kpi-column-group');
   const filterGroup = document.getElementById('kpi-filter-group');
   const calculationSelect = document.getElementById('kpi-calculation');
-  
+
   switch (cardType) {
     case 'stats':
       // Stats KPI - show all fields
@@ -2948,7 +3196,7 @@ function updateModalForCardType(cardType) {
       if (calculationSelect) calculationSelect.style.display = 'block';
       document.getElementById('kpi-card-title')?.setAttribute('placeholder', 'e.g., Project Progress');
       break;
-      
+
     case 'value':
       // Value KPI - show column and filter
       if (columnGroup) columnGroup.style.display = 'flex';
@@ -2956,7 +3204,7 @@ function updateModalForCardType(cardType) {
       if (calculationSelect) calculationSelect.style.display = 'block';
       document.getElementById('kpi-card-title')?.setAttribute('placeholder', 'e.g., Total Tasks Completed');
       break;
-      
+
     case 'gantt':
       // Gantt KPI - minimal fields needed
       if (columnGroup) columnGroup.style.display = 'none';
@@ -2964,7 +3212,7 @@ function updateModalForCardType(cardType) {
       if (calculationSelect) calculationSelect.style.display = 'none';
       document.getElementById('kpi-card-title')?.setAttribute('placeholder', 'e.g., Project Timeline');
       break;
-      
+
     case 'location':
       // Location KPI
       if (columnGroup) columnGroup.style.display = 'flex';
@@ -2972,7 +3220,7 @@ function updateModalForCardType(cardType) {
       if (calculationSelect) calculationSelect.style.display = 'none';
       document.getElementById('kpi-card-title')?.setAttribute('placeholder', 'Project Location Map');
       break;
-      
+
     case 'photo':
       // Photo KPI
       if (columnGroup) columnGroup.style.display = 'flex';
@@ -3285,16 +3533,16 @@ function previewKPI() {
   const calculation = document.getElementById('kpi-calculation')?.value;
   const column = document.getElementById('kpi-column')?.value;
   const filter = document.getElementById('kpi-filter')?.value;
-  
+
   if (!title || !dataSource || !calculation) {
     showNotification('Please fill in required fields', 'warning');
     return;
   }
-  
+
   const kpiData = getDynamicKPIData(dataSource, calculation, column, filter);
   const previewBox = document.getElementById('kpi-preview');
   const previewContent = document.getElementById('kpi-preview-content');
-  
+
   if (previewContent) {
     previewContent.innerHTML = `
       <div class="kpi-preview-value">${kpiData.value}</div>
@@ -3302,7 +3550,7 @@ function previewKPI() {
       <div class="kpi-preview-subtitle">${calculation} (${filter || 'all'})</div>
     `;
   }
-  
+
   if (previewBox) previewBox.style.display = 'block';
 }
 
@@ -3314,33 +3562,33 @@ function createDynamicKPI() {
   const column = document.getElementById('kpi-column')?.value;
   const filter = document.getElementById('kpi-filter')?.value;
   const width = parseInt(document.getElementById('kpi-card-width')?.value) || 6;
-  
+
   // Validate required fields
   if (!title) {
     showNotification('Please enter a card title', 'error');
     return;
   }
-  
+
   if ((cardType === 'value' || cardType === 'stats') && !dataSource) {
     showNotification('Please select a data source', 'error');
     return;
   }
-  
+
   if ((cardType === 'value' || cardType === 'stats') && !calculation) {
     showNotification('Please select a calculation type', 'error');
     return;
   }
-  
+
   const cardId = 'dynamic-kpi-' + Date.now();
   const gridStack = window.gridStack || document.getElementById('summary-grid')?.gridstack;
-  
+
   if (!gridStack) {
     showNotification('GridStack not initialized', 'error');
     return;
   }
-  
+
   let content = '';
-  
+
   // Generate content based on card type
   switch (cardType) {
     case 'stats':
@@ -3362,7 +3610,7 @@ function createDynamicKPI() {
         </div>
       `;
       break;
-      
+
     case 'gantt':
       content = `
         <div class="grid-stack-item-content summary-card" data-card-id="${cardId}">
@@ -3379,7 +3627,7 @@ function createDynamicKPI() {
         </div>
       `;
       break;
-      
+
     case 'location':
       content = `
         <div class="grid-stack-item-content summary-card" data-card-id="${cardId}">
@@ -3396,7 +3644,7 @@ function createDynamicKPI() {
         </div>
       `;
       break;
-      
+
     case 'photo':
       content = `
         <div class="grid-stack-item-content summary-card" data-card-id="${cardId}">
@@ -3414,18 +3662,18 @@ function createDynamicKPI() {
       `;
       break;
   }
-  
+
   // Add new grid item
   const newItem = gridStack.addWidget({
     w: width,
     h: 6,
     content: content
   });
-  
+
   // Setup event listeners for the new buttons
   const lockBtn = document.querySelector(`.card-lock-btn[data-card-id="${cardId}"]`);
   const removeBtn = document.querySelector(`.card-remove-btn[data-card-id="${cardId}"]`);
-  
+
   lockBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleCardLock(cardId);
@@ -3434,19 +3682,19 @@ function createDynamicKPI() {
     e.stopPropagation();
     removeCard(cardId);
   });
-  
+
   // Store card configuration for future updates
   if (!state.dynamicKPIs) state.dynamicKPIs = {};
   state.dynamicKPIs[cardId] = {
-    title, 
+    title,
     cardType,
-    dataSource, 
-    calculation, 
-    column, 
+    dataSource,
+    calculation,
+    column,
     filter,
     width
   };
-  
+
   closeCreateKPIModal();
   saveTasks();
   showNotification('✓ KPI card created successfully!', 'success');
@@ -3464,12 +3712,12 @@ function setupEventListeners() {
     state.summaryPageSize = e.target.value || 'a3';
   });
   document.getElementById("theme-toggle-btn")?.addEventListener("click", () => ThemeManager.toggle());
-  
+
   // Wizard Events
   document.getElementById("browse-btn")?.addEventListener("click", () => document.getElementById("file-input")?.click());
   document.getElementById("file-input")?.addEventListener("change", (e) => { if (e.target.files[0]) handleFileUpload(e.target.files[0]); });
   document.getElementById("load-sheets-btn")?.addEventListener("click", () => {
-    const url = document.getElementById("gsheet-url")?.value;
+    const url = document.getElementById("gsheet-url")?.value?.trim();
     if (!url) {
       showNotification('Enter a Google Sheets URL to continue.', 'error');
       return;
@@ -3491,17 +3739,17 @@ function setupEventListeners() {
   // Form
   document.getElementById("task-form")?.addEventListener("submit", (e) => {
     e.preventDefault();
-    const id = parseInt(e.target.dataset.editingTaskId);
+    const id = parseInt(e.target.dataset.editingTaskId, 10);
     const existing = state.tasks.find(t => t.id === id);
     const taskData = {
       id: id || generateTaskId(),
-      name: sanitizeInput(document.getElementById("task-name").value),
-      start: new Date(document.getElementById("task-start").value),
-      end: new Date(document.getElementById("task-end").value),
-      progress: parseInt(document.getElementById("task-progress").value) || 0,
-      assignedTo: sanitizeInput(document.getElementById("task-assignee").value),
-      dependencies: Array.from(document.querySelectorAll("#task-depends option:checked")).map(o => parseInt(o.value)).filter(v => !isNaN(v)),
-      row: existing?.row || 0, class: 'blue'
+      name: String(document.getElementById("task-name")?.value || '').trim().substring(0, 200),
+      start: new Date(document.getElementById("task-start")?.value),
+      end: new Date(document.getElementById("task-end")?.value),
+      progress: clampNumber(document.getElementById("task-progress")?.value, 0, 100, 0),
+      assignedTo: String(document.getElementById("task-assignee")?.value || '').trim().substring(0, 100),
+      dependencies: Array.from(document.querySelectorAll("#task-depends option:checked")).map(o => parseInt(o.value, 10)).filter(v => !isNaN(v)),
+      row: existing?.row || 0, class: existing?.class || 'blue'
     };
     const validation = validateTask(taskData);
     if (validation.valid) {
@@ -3520,12 +3768,22 @@ function setupEventListeners() {
 
   // Sheets Sync
   document.getElementById("sync-sheets-btn")?.addEventListener("click", () => {
-    const url = document.getElementById("sheets-url")?.value;
-    if (url) { showNotification("Syncing...", "info"); resetSheetPreviewUI(); startGoogleSheetsPolling(url); }
+    const url = document.getElementById("sheets-url")?.value?.trim();
+    if (!url) {
+      showNotification('Enter a Google Sheets URL first.', 'error');
+      return;
+    }
+    if (!isGoogleSheetsUrl(url)) {
+      showNotification('Enter a valid Google Sheets URL.', 'error');
+      return;
+    }
+    showNotification("Syncing...", "info");
+    resetSheetPreviewUI();
+    startGoogleSheetsPolling(url);
   });
   document.getElementById("stop-sheets-btn")?.addEventListener("click", stopGoogleSheetsPolling);
   document.getElementById("preview-sheets-btn")?.addEventListener("click", async () => {
-    const url = document.getElementById("sheets-url")?.value;
+    const url = document.getElementById("sheets-url")?.value?.trim();
     if (!url) {
       showNotification('Enter a Google Sheets URL first.', 'error');
       return;
@@ -3557,13 +3815,13 @@ function setupEventListeners() {
   document.getElementById('import-selected-tab-btn')?.addEventListener('click', importGoogleSheetTab);
   document.getElementById('import-all-tabs-btn')?.addEventListener('click', importAllGoogleSheetTabs);
   document.getElementById('sheets-url')?.addEventListener('input', resetSheetPreviewUI);
-  
+
   // ===== KPI CARD MANAGEMENT LISTENERS =====
-  
+
   // Edit summary title
   document.getElementById('edit-title-btn')?.addEventListener('click', editSummaryTitle);
   document.getElementById('summary-title')?.addEventListener('click', editSummaryTitle);
-  
+
   // Sanitize paste into contenteditable title (force plain text only)
   document.getElementById('summary-title')?.addEventListener('paste', (e) => {
     e.preventDefault();
@@ -3573,22 +3831,22 @@ function setupEventListeners() {
       document.execCommand('insertText', false, plainText.substring(0, 100));
     }
   });
-  
+
   // Create KPI button
   document.getElementById('create-kpi-btn')?.addEventListener('click', openCreateKPIModal);
-  
+
   // KPI Modal listeners
   document.getElementById('kpi-modal-close')?.addEventListener('click', closeCreateKPIModal);
   document.getElementById('kpi-modal-cancel')?.addEventListener('click', closeCreateKPIModal);
   document.getElementById('kpi-preview-btn')?.addEventListener('click', previewKPI);
   document.getElementById('kpi-create-btn')?.addEventListener('click', createDynamicKPI);
-  
+
   // Update KPI column options based on data source
   document.getElementById('kpi-data-source')?.addEventListener('change', (e) => {
     const columnSelect = document.getElementById('kpi-column');
     const columnGroup = document.getElementById('kpi-column-group');
     const filterGroup = document.getElementById('kpi-filter-group');
-    
+
     if (e.target.value === 'tasks') {
       columnSelect.innerHTML = `
         <option value="">-- Select column --</option>
@@ -3603,7 +3861,7 @@ function setupEventListeners() {
       filterGroup.style.display = 'none';
     }
   });
-  
+
   // Setup delegation for dynamically created card buttons
   document.addEventListener('click', (e) => {
     if (e.target.closest('.card-lock-btn')) {
@@ -3615,69 +3873,87 @@ function setupEventListeners() {
       if (cardId) removeCard(cardId);
     }
   });
-  
+
   // Project event listeners
   setupProjectEventListeners();
 }
 
+function setTopbarActionsForPage(page) {
+  const summaryOnly = ['share-btn', 'pdf-btn'];
+  summaryOnly.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.style.display = page === 'summary' ? 'inline-block' : 'none';
+  });
+}
+
+function activatePage(page) {
+  if (!page) return;
+  document.querySelectorAll('.nav-item').forEach(navItem => {
+    const isActive = navItem.dataset.page === page;
+    navItem.classList.toggle('active', isActive);
+    if (isActive) navItem.setAttribute('aria-current', 'page');
+    else navItem.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.view-container').forEach(view => view.style.display = 'none');
+
+  const target = document.getElementById(`view-${page}`);
+  if (target) target.style.display = page === 'dashboard' ? 'flex' : 'block';
+  setTopbarActionsForPage(page);
+
+  if (page === 'summary') {
+    updateSummaryKPIs();
+    setupDynamicChartBuilder();
+    renderStatusChart();
+    requestAnimationFrame(() => {
+      initializeMap();
+      setupCardLockListeners();
+    });
+  }
+  if (page === 'dashboard') {
+    renderTaskList();
+    render();
+  }
+  if (page === 'team') renderTeamView();
+  if (page === 'projects') renderProjectsView();
+}
+
 function setupRouting() {
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const page = item.dataset.page;
-      if (!page) return;
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.view-container').forEach(v => v.style.display = 'none');
-      
-      const target = document.getElementById(`view-${page}`);
-      if (target) target.style.display = page === 'dashboard' ? 'flex' : 'block';
-      
-      if (page === 'summary') { 
-        updateSummaryKPIs();
-        setupDynamicChartBuilder();
-        renderStatusChart(); 
-        // Use requestAnimationFrame instead of setTimeout to avoid race conditions
-        requestAnimationFrame(() => {
-          initializeMap();
-          setupCardLockListeners();
-        });
-        document.getElementById('share-btn').style.display = 'inline-block';
-        document.getElementById('pdf-btn').style.display = 'inline-block';
-      } else {
-        document.getElementById('share-btn').style.display = 'none';
-        document.getElementById('pdf-btn').style.display = 'none';
+    item.setAttribute('tabindex', item.getAttribute('tabindex') || '0');
+    const route = () => activatePage(item.dataset.page);
+    item.addEventListener('click', route);
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        route();
       }
-      if (page === 'dashboard') {
-        renderTaskList();
-        render();
-      }
-      if (page === 'team') renderTeamView();
-      if (page === 'projects') renderProjectsView();
     });
   });
+  const activePage = document.querySelector('.nav-item.active')?.dataset.page || 'dashboard';
+  activatePage(activePage);
 }
 
 async function initialize() {
   // Initialize theme
   ThemeManager.init();
-  
+
   // Initialize PDF export worker
   PDFWorkerManager.initialize();
-  
+
   // Check for shared view
   const shareId = getShareIdFromUrl();
   if (shareId) {
     state.sharedViewId = shareId;
     activateSharedSummaryView();
   }
-  
+
   await loadTasks();
   if (typeof KPIModals !== 'undefined' && typeof KPIModals.refresh === 'function') {
     KPIModals.refresh();
   }
   PROJECT_START = getProjectStart();
   if (state.scale === "month") state.monthOffsets = calculateMonthOffsets(PROJECT_START, 36);
-  
+
   renderTimeline();
   renderTaskList();
   render();
@@ -3686,13 +3962,13 @@ async function initialize() {
   setupRouting();
   setupInfiniteScrollTimeline();
   setupSearchFilter();
-  
+
   // Update summary title if it was saved
   if (state.summaryTitle && state.summaryTitle !== 'Project Summary') {
     const titleEl = document.getElementById('summary-title');
     if (titleEl) titleEl.textContent = state.summaryTitle;
   }
-  
+
   // Initialize GridStack with responsive configuration
   const initializeGridStack = () => {
     try {
@@ -3779,7 +4055,7 @@ async function initialize() {
           const card = document.querySelector(`[data-card-id="${cardId}"]`);
           const gridItem = card?.closest('.grid-stack-item');
           const lockBtn = document.querySelector(`.card-lock-btn[data-card-id="${cardId}"]`);
-          
+
           if (gridItem && lockBtn) {
             gridItem.classList.add('gs-locked');
             lockBtn.textContent = '🔒';
@@ -3822,10 +4098,10 @@ function openProjectModal(project) {
   document.getElementById('project-description').value = project.description || '';
   document.getElementById('project-source').value = project.source || 'Manual';
   document.getElementById('project-created').value = new Date(project.created).toLocaleDateString();
-  
+
   // Populate sheets list
   const sheetsList = document.getElementById('project-sheets-list');
-  sheetsList.innerHTML = project.sheets && project.sheets.length > 0 
+  sheetsList.innerHTML = project.sheets && project.sheets.length > 0
     ? project.sheets.map(sheet => `
       <div class="sheet-item">
         <span class="sheet-name">${sanitizeInput(sheet.name)}</span>
@@ -3833,16 +4109,20 @@ function openProjectModal(project) {
           <span class="sheet-columns">${sheet.headers?.length || 0} columns</span>
           <span class="sheet-rows">${sheet.data?.length || 0} rows</span>
         </div>
-        <button class="btn-small btn-danger" onclick="removeSheet('${project.id}', '${sheet.id}')">Remove</button>
+        <button class="btn-small btn-danger remove-sheet-btn" type="button" data-project-id="${escapeAttribute(project.id)}" data-sheet-id="${escapeAttribute(sheet.id)}">Remove</button>
       </div>
     `).join('')
     : '<p class="no-sheets">No data sheets yet</p>';
-  
+
+  sheetsList.querySelectorAll('.remove-sheet-btn').forEach(button => {
+    button.addEventListener('click', () => removeSheet(button.dataset.projectId, button.dataset.sheetId));
+  });
+
   // Populate sheet selector
   const selector = document.getElementById('sheet-selector');
-  selector.innerHTML = '<option value="">-- Choose Sheet --</option>' + 
-    (project.sheets || []).map(s => `<option value="${s.id}">${sanitizeInput(s.name)}</option>`).join('');
-  
+  selector.innerHTML = '<option value="">-- Choose Sheet --</option>' +
+    (project.sheets || []).map(s => `<option value="${escapeAttribute(s.id)}">${sanitizeInput(s.name)}</option>`).join('');
+
   document.getElementById('project-modal').classList.remove('hidden');
 }
 
@@ -3853,20 +4133,20 @@ function closeProjectModal() {
 
 function saveProjectChanges() {
   if (!state.currentProject) return;
-  
+
   const validation = validateProject({
     name: document.getElementById('project-name').value,
     description: document.getElementById('project-description').value
   });
-  
+
   if (!validation.valid) {
     showNotification(validation.error, 'error');
     return;
   }
-  
+
   state.currentProject.name = sanitizeInput(document.getElementById('project-name').value);
   state.currentProject.description = sanitizeInput(document.getElementById('project-description').value);
-  
+
   saveTasks();
   refreshProjectSelector();
   renderProjectsView();
@@ -3876,10 +4156,10 @@ function saveProjectChanges() {
 
 function deleteProject(projectId) {
   if (!projectId) return;
-  
+
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
-  
+
   showConfirmDialog(
     `Delete Project: ${project.name}?`,
     'This action cannot be undone. All associated data will be lost.',
@@ -3887,28 +4167,16 @@ function deleteProject(projectId) {
       console.log('[CLIENT] Deleting project:', projectId);
       console.log('[CLIENT] Tasks before delete:', state.tasks.length);
       console.log('[CLIENT] Tasks with this projectId:', state.tasks.filter(t => t.projectId === projectId).length);
-      
-      // Remove tasks associated with this project
-      const deletedTaskIds = state.tasks.filter(t => t.projectId === projectId).map(t => t.id);
-      state.tasks = state.tasks.filter(t => t.projectId !== projectId);
-      
+
+      // Remove tasks and every stale reference associated with this project.
+      const deletedTaskIds = state.tasks.filter(t => String(t.projectId) === String(projectId)).map(t => t.id);
+      state.tasks = state.tasks.filter(t => String(t.projectId) !== String(projectId));
+      state.projects = state.projects.filter(p => String(p.id) !== String(projectId));
+      reconcileStateAfterDeletion({ removedProjectIds: [projectId], removedTaskIds: deletedTaskIds });
+
       console.log('[CLIENT] Tasks after delete:', state.tasks.length);
       console.log('[CLIENT] Deleted task IDs:', deletedTaskIds);
-      
-      // Remove dependencies to deleted tasks
-      state.tasks.forEach(task => {
-        task.dependencies = task.dependencies.filter(dep => !deletedTaskIds.includes(dep));
-      });
-      
-      state.projects = state.projects.filter(p => p.id !== projectId);
-      
-      // Clear filter if it was the deleted project
-      if (state.filterProjectId === projectId) {
-        state.filterProjectId = null;
-      }
-      
-      refreshProjectSelector();
-      calculateTaskRows();
+
       saveTasks().then(() => {
         // Call cleanup endpoint to ensure server-side cleanup
         fetch('/api/cleanup', { method: 'POST' })
@@ -3920,14 +4188,8 @@ function deleteProject(projectId) {
           })
           .catch(err => console.error('[CLIENT] Cleanup endpoint error:', err));
       });
-      
-      renderProjectsView();
-      renderTaskList();
-      render();
-      updateSummaryKPIs();
-      renderStatusChart();
-      setupDynamicChartBuilder();
-      renderTeamView();
+
+      refreshAllProjectViews();
       closeProjectModal();
       showNotification('✓ Project deleted successfully', 'success');
     }
@@ -3937,7 +4199,7 @@ function deleteProject(projectId) {
 function removeSheet(projectId, sheetId) {
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
-  
+
   project.sheets = (project.sheets || []).filter(s => s.id !== sheetId);
   saveTasks();
   openProjectModal(project);
@@ -3960,16 +4222,24 @@ function showLoadingState(message = "Loading...") {
     loader = document.createElement('div');
     loader.id = 'loading-indicator';
     loader.className = 'loading-overlay';
-    loader.innerHTML = `
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p class="loading-text">${message}</p>
-      </div>
-    `;
+
+    const content = document.createElement('div');
+    content.className = 'loading-content';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'loading-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+
+    const text = document.createElement('p');
+    text.className = 'loading-text';
+
+    content.append(spinner, text);
+    loader.appendChild(content);
     document.body.appendChild(loader);
-  } else {
-    loader.querySelector('.loading-text').textContent = message;
   }
+
+  const textEl = loader.querySelector('.loading-text');
+  if (textEl) textEl.textContent = String(message || 'Loading...');
   loader.classList.add('visible');
   return loader;
 }
@@ -4003,7 +4273,7 @@ const UndoRedoManager = {
   undoStack: [],
   redoStack: [],
   maxStackSize: 50,
-  
+
   saveState(description = 'Action') {
     try {
       const snapshot = {
@@ -4016,10 +4286,10 @@ const UndoRedoManager = {
         timestamp: Date.now(),
         description
       };
-      
+
       this.undoStack.push(snapshot);
       this.redoStack = []; // Clear redo stack when new action is performed
-      
+
       // Limit stack size
       if (this.undoStack.length > this.maxStackSize) {
         this.undoStack.shift();
@@ -4028,13 +4298,13 @@ const UndoRedoManager = {
       console.error('Error saving undo state:', error);
     }
   },
-  
+
   undo() {
     if (this.undoStack.length === 0) {
       showNotification('⚠ Nothing to undo', 'info');
       return false;
     }
-    
+
     try {
       // Save current state to redo stack
       const currentSnapshot = {
@@ -4048,7 +4318,7 @@ const UndoRedoManager = {
         description: 'Current'
       };
       this.redoStack.push(currentSnapshot);
-      
+
       // Restore previous state
       const snapshot = this.undoStack.pop();
       state.tasks = snapshot.tasks.map(t => ({
@@ -4057,7 +4327,7 @@ const UndoRedoManager = {
         end: new Date(t.end)
       }));
       state.projects = snapshot.projects || [];
-      
+
       saveTasks();
       render();
       renderTaskList();
@@ -4070,13 +4340,13 @@ const UndoRedoManager = {
       return false;
     }
   },
-  
+
   redo() {
     if (this.redoStack.length === 0) {
       showNotification('⚠ Nothing to redo', 'info');
       return false;
     }
-    
+
     try {
       // Save current state to undo stack
       const currentSnapshot = {
@@ -4090,7 +4360,7 @@ const UndoRedoManager = {
         description: 'Current'
       };
       this.undoStack.push(currentSnapshot);
-      
+
       // Restore next state
       const snapshot = this.redoStack.pop();
       state.tasks = snapshot.tasks.map(t => ({
@@ -4099,7 +4369,7 @@ const UndoRedoManager = {
         end: new Date(t.end)
       }));
       state.projects = snapshot.projects || [];
-      
+
       saveTasks();
       render();
       renderTaskList();
@@ -4151,7 +4421,7 @@ function setupCardLockListeners() {
       toggleCardLock(cardId);
     });
   });
-  
+
   // Update UI for all locked cards on load
   Object.keys(state.cardLocks || {}).forEach(cardId => {
     if (state.cardLocks[cardId]) updateCardLockUI(cardId);
@@ -4187,10 +4457,10 @@ function showConfirmDialog(title, message, onConfirm, onCancel = null) {
     `;
     document.body.appendChild(dialog);
   }
-  
+
   document.getElementById('confirm-title').textContent = title;
   document.getElementById('confirm-message').textContent = message;
-  
+
   const closeDialog = () => dialog.classList.add('hidden');
   const handleConfirm = () => {
     closeDialog();
@@ -4200,11 +4470,11 @@ function showConfirmDialog(title, message, onConfirm, onCancel = null) {
     closeDialog();
     if (onCancel) onCancel();
   };
-  
+
   document.getElementById('confirm-close').onclick = handleCancel;
   document.getElementById('confirm-cancel').onclick = handleCancel;
   document.getElementById('confirm-ok').onclick = handleConfirm;
-  
+
   dialog.classList.remove('hidden');
 }
 
@@ -4215,20 +4485,17 @@ function showConfirmDialog(title, message, onConfirm, onCancel = null) {
 function deleteTask(taskId) {
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
-  
+
   showConfirmDialog(
     `Delete Task: ${task.name}?`,
     'This task will be removed from your project. This action cannot be undone.',
     () => {
       UndoRedoManager.saveState(`Delete task: ${task.name}`);
-      state.tasks = state.tasks.filter(t => t.id !== taskId);
+      removeTaskFromProjectSheets(task);
+      state.tasks = state.tasks.filter(t => String(t.id) !== String(taskId));
+      reconcileStateAfterDeletion({ removedTaskIds: [taskId] });
       saveTasks();
-      render();
-      renderTaskList();
-      updateSummaryKPIs();
-      renderStatusChart();
-      renderTeamView();
-      renderProjectsView();
+      refreshAllProjectViews();
       showNotification('✓ Task deleted successfully', 'success');
     }
   );
@@ -4241,7 +4508,7 @@ function deleteTask(taskId) {
 function setupProjectEventListeners() {
   // Create project
   document.getElementById('create-project-btn')?.addEventListener('click', createNewProject);
-  
+
   // Project modal buttons
   document.getElementById('project-modal-close')?.addEventListener('click', closeProjectModal);
   document.getElementById('project-modal-cancel')?.addEventListener('click', closeProjectModal);
@@ -4249,7 +4516,7 @@ function setupProjectEventListeners() {
   document.getElementById('project-modal-delete')?.addEventListener('click', () => {
     deleteProject(state.currentProject?.id);
   });
-  
+
   // Modal overlay click to close
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
@@ -4259,24 +4526,24 @@ function setupProjectEventListeners() {
       else if (modal?.id === 'import-modal') closeImportWizard();
     });
   });
-  
+
   // Sheet selector change
   document.getElementById('sheet-selector')?.addEventListener('change', (e) => {
     const sheetId = e.target.value;
     if (!sheetId || !state.currentProject) return;
-    
+
     const sheet = state.currentProject.sheets.find(s => s.id === sheetId);
     if (!sheet) return;
-    
+
     const tableContainer = document.getElementById('project-data-table');
-    let html = '<table class="data-table"><thead><tr>' + 
-      (sheet.headers || []).map(h => `<th>${sanitizeInput(h)}</th>`).join('') + 
+    let html = '<table class="data-table"><thead><tr>' +
+      (sheet.headers || []).map(h => `<th>${sanitizeInput(h)}</th>`).join('') +
       '</tr></thead><tbody>';
-    
+
     (sheet.data || []).slice(0, 10).forEach(row => {
       html += '<tr>' + (sheet.headers || []).map(h => `<td>${sanitizeInput(String(row[h] || ''))}</td>`).join('') + '</tr>';
     });
-    
+
     tableContainer.innerHTML = html + '</tbody></table>';
   });
 }
@@ -4295,12 +4562,12 @@ const FilterManager = {
     endDate: null,
     status: 'all' // all, notStarted, inProgress, completed
   },
-  
+
   setFilter(name, value) {
     this.filters[name] = value;
     this.applyFilters();
   },
-  
+
   resetFilters() {
     this.filters = {
       searchText: '',
@@ -4313,58 +4580,58 @@ const FilterManager = {
     };
     this.applyFilters();
   },
-  
+
   matches(task) {
     // Search text filter
     if (this.filters.searchText) {
       const searchLower = this.filters.searchText.toLowerCase();
-      if (!task.name.toLowerCase().includes(searchLower) && 
+      if (!task.name.toLowerCase().includes(searchLower) &&
           !task.assignedTo?.toLowerCase().includes(searchLower)) {
         return false;
       }
     }
-    
+
     // Assignee filter
     if (this.filters.assignee) {
       if (!task.assignedTo || task.assignedTo !== this.filters.assignee) {
         return false;
       }
     }
-    
+
     // Progress range filter
     const progress = task.progress || 0;
     if (progress < this.filters.progressMin || progress > this.filters.progressMax) {
       return false;
     }
-    
+
     // Start date filter
     if (this.filters.startDate) {
       if (task.end < this.filters.startDate) {
         return false;
       }
     }
-    
+
     // End date filter
     if (this.filters.endDate) {
       if (task.start > this.filters.endDate) {
         return false;
       }
     }
-    
+
     // Status filter
     if (this.filters.status !== 'all') {
       if (this.filters.status === 'notStarted' && progress !== 0) return false;
       if (this.filters.status === 'inProgress' && (progress === 0 || progress === 100)) return false;
       if (this.filters.status === 'completed' && progress !== 100) return false;
     }
-    
+
     return true;
   },
-  
+
   applyFilters() {
     renderTaskList();
   },
-  
+
   getFilteredTasks() {
     return state.tasks.filter(task => this.matches(task));
   }
@@ -4375,43 +4642,80 @@ function renderTaskListWithFilters() {
   try {
     DOM.taskList.innerHTML = "";
     const filteredTasks = FilterManager.getFilteredTasks();
-    
+
     if (filteredTasks.length === 0) {
       DOM.taskList.innerHTML = '<div class="empty-state">No tasks match your filters. Try adjusting your search criteria.</div>';
       return;
     }
 
+    const fragment = document.createDocumentFragment();
     filteredTasks.forEach(task => {
       try {
+        const progress = clampNumber(task.progress, 0, 100, 0);
+        const progressColor = progress > 70 ? "#4ade80" : progress > 30 ? "#facc15" : "#ef4444";
         const taskEl = document.createElement("div");
         taskEl.className = `task-item ${state.selectedTask?.id === task.id ? "selected" : ""}`;
-        const progressColor = task.progress > 70 ? "#4ade80" : task.progress > 30 ? "#facc15" : "#ef4444";
-        
-        taskEl.innerHTML = `
-          <div class="task-item-content">
-            <div class="task-item-header">
-              <h4 class="task-name">${sanitizeInput(task.name)}</h4>
-              <span class="task-progress-text">${task.progress}%</span>
-            </div>
-            <div class="task-progress-bar"><div class="progress-bar-fill" style="width: ${task.progress}%; background: ${progressColor};"></div></div>
-            <div class="task-meta">
-              <span class="task-date">📅 ${formatDateDisplay(task.start)} → ${formatDateDisplay(task.end)}</span>
-              <span class="task-assigned">👤 ${sanitizeInput(task.assignedTo || "Unassigned")}</span>
-            </div>
-          </div>
-          <div class="task-actions">
-            <button class="task-btn-edit">✏️</button>
-            <button class="task-btn-delete">🗑️</button>
-          </div>`;
 
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "task-item-content";
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = "task-item-header";
+
+        const name = document.createElement("h4");
+        name.className = "task-name";
+        name.textContent = task.name || 'Untitled Task';
+
+        const progressText = document.createElement("span");
+        progressText.className = "task-progress-text";
+        progressText.textContent = `${progress}%`;
+
+        headerDiv.append(name, progressText);
+
+        const progressBar = document.createElement("div");
+        progressBar.className = "task-progress-bar";
+        const progressFill = document.createElement("div");
+        progressFill.className = "progress-bar-fill";
+        progressFill.style.width = `${progress}%`;
+        progressFill.style.background = progressColor;
+        progressBar.appendChild(progressFill);
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+        const date = document.createElement("span");
+        date.className = "task-date";
+        date.textContent = `📅 ${formatDateDisplay(task.start)} → ${formatDateDisplay(task.end)}`;
+        const assignee = document.createElement("span");
+        assignee.className = "task-assigned";
+        assignee.textContent = `👤 ${task.assignedTo || "Unassigned"}`;
+        meta.append(date, assignee);
+
+        contentDiv.append(headerDiv, progressBar, meta);
+
+        const actions = document.createElement("div");
+        actions.className = "task-actions";
+        const editBtn = document.createElement("button");
+        editBtn.className = "task-btn-edit";
+        editBtn.type = "button";
+        editBtn.setAttribute("aria-label", `Edit ${task.name || 'task'}`);
+        editBtn.textContent = "✏️";
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "task-btn-delete";
+        deleteBtn.type = "button";
+        deleteBtn.setAttribute("aria-label", `Delete ${task.name || 'task'}`);
+        deleteBtn.textContent = "🗑️";
+        actions.append(editBtn, deleteBtn);
+
+        taskEl.append(contentDiv, actions);
         taskEl.addEventListener("click", (e) => { if (!e.target.closest(".task-actions")) selectTask(task); });
-        taskEl.querySelector(".task-btn-edit").addEventListener("click", () => editTask(task));
-        taskEl.querySelector(".task-btn-delete").addEventListener("click", () => deleteTask(task.id));
-        DOM.taskList.appendChild(taskEl);
+        editBtn.addEventListener("click", () => editTask(task));
+        deleteBtn.addEventListener("click", () => deleteTask(task.id));
+        fragment.appendChild(taskEl);
       } catch (err) {
         console.error('Error rendering task:', task, err);
       }
     });
+    DOM.taskList.appendChild(fragment);
   } catch (error) {
     console.error('Task list render error:', error);
     DOM.taskList.innerHTML = '<div class="error-message">Error rendering task list</div>';
@@ -4432,8 +4736,8 @@ function setupSearchFilter() {
 async function generateShareableLink() {
   try {
     showLoadingState('Generating secure link...');
-    
-    // 1. Gather your dashboard state (WITHOUT Base64 snapshots if possible, 
+
+    // 1. Gather your dashboard state (WITHOUT Base64 snapshots if possible,
     // but if you must send snapshots, the backend handles the payload now, not the URL)
     const dashboardState = {
       kpis: {
@@ -4452,12 +4756,12 @@ async function generateShareableLink() {
     });
 
     if (!response.ok) throw new Error('Network response was not ok');
-    
+
     const data = await response.json();
-    
+
     // 3. Generate clean, short URL
     const shareUrl = `${window.location.origin}${window.location.pathname}?share=${data.shareId}`;
-    
+
     // 4. Copy to clipboard
     await navigator.clipboard.writeText(shareUrl);
     showNotification('Secure link copied to clipboard!', 'success');
@@ -4505,7 +4809,7 @@ function activateSharedSummaryView() {
 function getChartData(canvasId) {
   const canvas = document.getElementById(canvasId);
   let chartInstance = null;
-  
+
   if (canvasId === 'summary-custom-chart' && window.dynamicChart) {
     chartInstance = window.dynamicChart;
   } else if (canvasId === 'status-chart' && window.statusChart) {
@@ -4513,9 +4817,9 @@ function getChartData(canvasId) {
   } else if (canvas?.chart) {
     chartInstance = canvas.chart;
   }
-  
+
   if (!canvas || !chartInstance) return null;
-  
+
   const snapshot = (() => {
     try {
       return canvas.toDataURL('image/png');
@@ -4551,7 +4855,7 @@ function getChartData(canvasId) {
 
 function getGridStackLayout() {
   if (!window.gridStack) return [];
-  
+
   return window.gridStack.getGridItems().map(item => ({
     id: item.dataset.cardId,
     x: item.gridstackNode.x,
@@ -4604,7 +4908,7 @@ function loadSharedView(sharedState) {
 
     // 2. Lock down GridStack so cards cannot be dragged or resized
     if (window.gridStack) {
-        window.gridStack.setStatic(true); 
+        window.gridStack.setStatic(true);
     }
 
     if (dashboardState.kpis) {
@@ -4618,7 +4922,7 @@ function loadSharedView(sharedState) {
     setupDynamicChartBuilder();
     initializeMap();
     renderStatusChart();
-    
+
     // Render custom KPI cards in shared view
     if (typeof KPIModals !== 'undefined' && KPIModals.renderSavedCards) {
       KPIModals.renderSavedCards();
@@ -4657,7 +4961,7 @@ function loadSharedView(sharedState) {
 // NEW: Transition wrapper for smooth data updates
 function updateDashboardWithFade(updateCallback) {
   const cards = document.querySelectorAll('.summary-card');
-  
+
   // Fade out
   cards.forEach(card => card.classList.add('loading-fade'));
 
@@ -4697,7 +5001,7 @@ function renderChartSnapshot(canvasId, snapshot) {
 function renderChartFromData(canvasId, chartData) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !chartData) return;
-  
+
   if (!chartData.type || !chartData.data) {
     // Fallback simple rendering
     const ctx = canvas.getContext('2d');
@@ -4710,17 +5014,17 @@ function renderChartFromData(canvasId, chartData) {
     ctx.fillText('Chart Data', canvas.width / 2, canvas.height / 2);
     return;
   }
-  
+
   // Destroy existing chart if it exists
   if (canvas.chart) {
     canvas.chart.destroy();
   }
-  
+
   try {
     // Get theme-aware colors and apply to config
     const colors = getChartColors();
     applyThemeToChartConfig(chartData, colors);
-    
+
     // Render chart using Chart.js
     canvas.chart = new Chart(canvas, {
       type: chartData.type,
@@ -4760,7 +5064,7 @@ async function exportSummaryToPDF() {
     // 1. Show loading spinner with progress updates
     const loadingModal = document.getElementById('pdf-loading-modal');
     const progressBar = loadingModal?.querySelector('.pdf-export-progress');
-    
+
     if (loadingModal) {
       loadingModal.classList.remove('hidden');
       // Initialize progress bar if it exists
@@ -4797,7 +5101,7 @@ async function exportSummaryToPDF() {
     // 3. Capture image snapshots from original photo cards - with retry for lazy-loaded images
     const imageSnapshotsByUrl = new Map();
     const originalImages = Array.from(gridElement.querySelectorAll('img'));
-    
+
     // Chunked image processing
     for (const origImg of originalImages) {
       if (origImg.complete && origImg.naturalWidth > 0 && !imageSnapshotsByUrl.has(origImg.src)) {
@@ -4839,7 +5143,7 @@ async function exportSummaryToPDF() {
     // 4. Capture map snapshots (Chunked sequentially instead of Promise.all)
     const originalMapContainers = Array.from(new Set(Array.from(gridElement.querySelectorAll('#map, [id^="map-"]'))));
     const mapSnapshotsById = new Map();
-    
+
     for (const mapContainer of originalMapContainers) {
       const mapId = mapContainer.id;
       if (mapId && typeof window.html2canvas !== 'undefined') {
@@ -4869,7 +5173,7 @@ async function exportSummaryToPDF() {
       display: flex;
       flex-direction: column;
     `;
-    
+
     // Clone and style header if present
     if (headerElement) {
       const clonedHeader = headerElement.cloneNode(true);
@@ -4881,12 +5185,12 @@ async function exportSummaryToPDF() {
         page-break-after: avoid;
         page-break-inside: avoid;
       `;
-      
+
       // Remove action buttons from header
       clonedHeader.querySelectorAll('.kpi-actions, .kpi-selector').forEach(el => {
         el.style.display = 'none';
       });
-      
+
       // Style title prominently
       const titleEl = clonedHeader.querySelector('.editable-title');
       if (titleEl) {
@@ -4897,13 +5201,13 @@ async function exportSummaryToPDF() {
           margin: 0 0 10px 0 !important;
         `;
       }
-      
+
       pdfWrapper.appendChild(clonedHeader);
     }
 
     // Clone grid
     const clonedGrid = gridElement.cloneNode(true);
-    
+
     // Remove interactive buttons
     clonedGrid.querySelectorAll('.card-lock-btn, .card-remove-btn').forEach(btn => {
       btn.style.visibility = 'hidden';
@@ -4997,7 +5301,7 @@ async function exportSummaryToPDF() {
       if (snapshot) {
         img.src = snapshot;
       }
-      
+
       img.style.cssText = `
         width: 100% !important;
         height: auto !important;
@@ -5053,7 +5357,7 @@ async function exportSummaryToPDF() {
         padding-bottom: 12px !important;
         border-bottom: 1px solid #eee !important;
       `;
-      
+
       header.querySelectorAll('h3').forEach(h => {
         h.style.cssText = 'color: #000 !important; margin: 0 !important; font-size: 16px !important;';
       });
@@ -5158,7 +5462,7 @@ async function exportSummaryToPDF() {
   } catch (error) {
     console.error('Export error:', error);
     showNotification('✗ Export failed: ' + error.message, 'error');
-    
+
     // Ensure the loading modal is hidden in case of a fatal try/catch error
     const loadingModal = document.getElementById('pdf-loading-modal');
     if (loadingModal) {

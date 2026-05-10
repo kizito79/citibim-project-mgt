@@ -25,14 +25,14 @@
       <img src="https://citibim.com/wp-content/uploads/2025/05/cropped-Citibim-logo.png" alt="Logo">
           </div>
     <nav class="nav-menu">
-      <div class="nav-item" data-page="summary" title="Summary" aria-label="View project summary" role="button">📈</div>
-      <div class="nav-item active" data-page="dashboard" title="Dashboard" aria-label="View dashboard" role="button">📊</div>
-      <div class="nav-item" data-page="projects" title="Projects" aria-label="View projects" role="button">📁</div>
-      <div class="nav-item" data-page="team" title="Team" aria-label="View team" role="button">👥</div>
-      <div class="nav-item" data-page="settings" title="Settings" aria-label="View settings" role="button">⚙️</div>
+      <div class="nav-item" data-page="summary" tabindex="0" title="Summary" aria-label="View project summary" role="button">📈</div>
+      <div class="nav-item active" data-page="dashboard" tabindex="0" title="Dashboard" aria-label="View dashboard" role="button" aria-current="page">📊</div>
+      <div class="nav-item" data-page="projects" tabindex="0" title="Projects" aria-label="View projects" role="button">📁</div>
+      <div class="nav-item" data-page="team" tabindex="0" title="Team" aria-label="View team" role="button">👥</div>
+      <div class="nav-item" data-page="settings" tabindex="0" title="Settings" aria-label="View settings" role="button">⚙️</div>
     </nav>
     <div class="sidebar-footer">
-      <div class="nav-item" data-page="help" title="Help" aria-label="View help" role="button">❓</div>
+      <div class="nav-item" data-page="help" tabindex="0" title="Help" aria-label="View help" role="button">❓</div>
     </div>
   </aside>
 
@@ -261,7 +261,7 @@
           <div class="modal-content modal-md">
             <div class="modal-header">
               <h2>Add Project Location Map</h2>
-              <button class="btn-close" data-modal="modal-add-project-location">✕</button>
+              <button class="btn-close" type="button" data-modal-close="modal-add-project-location" aria-label="Close location modal">✕</button>
             </div>
             <div class="modal-body">
               <div class="form-group">
@@ -295,7 +295,7 @@
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn-preview" data-modal="modal-add-project-location">👁 Preview</button>
+              <button class="btn-preview" type="button">👁 Preview</button>
               <button class="btn btn-secondary" data-modal-close="modal-add-project-location">Cancel</button>
               <button class="btn btn-primary" id="location-create-btn">Create Map Card</button>
             </div>
@@ -308,7 +308,7 @@
           <div class="modal-content modal-md">
             <div class="modal-header">
               <h2>Add Project Photo</h2>
-              <button class="btn-close" data-modal="modal-add-project-photo">✕</button>
+              <button class="btn-close" type="button" data-modal-close="modal-add-project-photo" aria-label="Close photo modal">✕</button>
             </div>
             <div class="modal-body">
               <div class="form-group">

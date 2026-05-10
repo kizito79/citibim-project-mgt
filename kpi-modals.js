@@ -42,7 +42,7 @@ const KPIModals = {
     this.projects = [];
     this.projectFields = {};
 
-    if (typeof state !== 'undefined' && Array.isArray(state.projects) && state.projects.length > 0) {
+    if (typeof state !== 'undefined' && Array.isArray(state.projects)) {
       this.projects = state.projects.map(p => ({ id: p.id, name: p.name }));
       state.projects.forEach(project => {
         let headers = [];
@@ -63,13 +63,11 @@ const KPIModals = {
         this.projectFields[project.id] = headers;
       });
 
-      if (this.projects.length > 0) {
-        this.log('Projects loaded from state');
-        return;
-      }
+      this.log('Projects loaded from state');
+      return;
     }
 
-    // Fallback to saved project metadata if state is unavailable
+    // Fallback to saved project metadata only if dashboard state is unavailable.
     const savedProjects = localStorage.getItem('kpi-projects');
     if (savedProjects) {
       try {
@@ -127,6 +125,11 @@ const KPIModals = {
       const saved = localStorage.getItem('kpi-cards');
       if (saved) {
         this.kpiCards = JSON.parse(saved);
+        if (typeof state !== 'undefined' && Array.isArray(state.projects)) {
+          const validProjectIds = new Set(state.projects.map(project => String(project.id)));
+          this.kpiCards = this.kpiCards.filter(card => !card.project || validProjectIds.has(String(card.project)));
+          this.saveCards();
+        }
         this.log('Loaded', this.kpiCards.length, 'saved KPI cards');
       }
     } catch (error) {

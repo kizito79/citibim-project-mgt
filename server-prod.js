@@ -45,6 +45,74 @@ const DEFAULT_STATE = {
 
 const sharedViews = new Map();
 
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const MAX_SHARE_VIEWS = parsePositiveInteger(process.env.MAX_SHARE_VIEWS, 250);
+const SHARE_TTL_MS = parsePositiveInteger(process.env.SHARE_TTL_MS, 24 * 60 * 60 * 1000);
+const PRIVATE_STATIC_PATHS = new Set(['server.js', 'server-prod.js', 'package.json', 'package-lock.json', 'gantt-state.json']);
+
+function extractGoogleSheetInfo(url) {
+  if (!url || typeof url !== 'string') {
+    throw new Error('Google Sheets URL is required');
+  }
+
+  let parsed;
+  const trimmedUrl = url.trim();
+  try {
+    parsed = new URL(trimmedUrl);
+  } catch {
+    throw new Error('Invalid Google Sheets URL');
+  }
+
+  if (!['docs.google.com', 'spreadsheets.google.com'].includes(parsed.hostname)) {
+    throw new Error('URL must be a Google Sheets link');
+  }
+
+  const pathAndSearch = `${parsed.pathname}${parsed.search}`;
+  const hasCsvExport = /(?:export\?format=csv|pub\?output=csv|output=csv)/i.test(pathAndSearch);
+  const publishedMatch = parsed.pathname.match(/\/d\/e\/([a-zA-Z0-9-_]+)/);
+  const standardMatch = parsed.pathname.match(/\/d\/(?!e\/)([a-zA-Z0-9-_]+)/);
+  const queryId = parsed.searchParams.get('id') || parsed.searchParams.get('key');
+  const gid = parsed.searchParams.get('gid') || parsed.hash.match(/gid=(\d+)/)?.[1] || null;
+  const isPublishedCsv = Boolean(publishedMatch) || /\/pub/i.test(parsed.pathname) || /output=csv/i.test(parsed.search);
+  const actualSheetId = standardMatch?.[1] || queryId || null;
+  const publishedId = publishedMatch?.[1] || null;
+  const sheetId = actualSheetId || (isPublishedCsv ? publishedId : null);
+
+  if (!sheetId) {
+    throw new Error('Could not extract sheet ID from URL');
+  }
+
+  return { trimmedUrl, parsed, sheetId, actualSheetId, publishedId, gid, hasCsvExport, isPublishedCsv };
+}
+
+function isGoogleSheetsInputError(error) {
+  return /Google Sheets|Google Sheet|sheet ID|Invalid Google Sheets URL/i.test(error?.message || '');
+}
+
+function pruneExpiredShares() {
+  const now = Date.now();
+  for (const [shareId, sharedView] of sharedViews) {
+    if (sharedView.expiresAt <= now) sharedViews.delete(shareId);
+  }
+  while (sharedViews.size > MAX_SHARE_VIEWS) {
+    sharedViews.delete(sharedViews.keys().next().value);
+  }
+}
+
+function getSharePayload(shareId) {
+  const sharedView = sharedViews.get(shareId);
+  if (!sharedView) return null;
+  if (sharedView.expiresAt <= Date.now()) {
+    sharedViews.delete(shareId);
+    return null;
+  }
+  return sharedView.payload;
+}
+
 // ============================================
 // LOGGING INFRASTRUCTURE
 // ============================================
@@ -234,8 +302,14 @@ async function writeStateFile(state) {
     // Create backup before overwriting
     await createBackup(state);
     
-    // Write with fsync for durability
-    await fs.writeFile(DATA_FILE, JSON.stringify(state, null, 2));
+    const tempFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await fs.writeFile(tempFile, JSON.stringify(state, null, 2), 'utf8');
+      await fs.rename(tempFile, DATA_FILE);
+    } catch (writeError) {
+      await fs.rm(tempFile, { force: true }).catch(() => {});
+      throw writeError;
+    }
     Logger.info('State file written successfully', { taskCount: state.tasks?.length || 0 });
   } catch (error) {
     Logger.error('Failed to write state file', { error: error.message });
@@ -255,10 +329,11 @@ async function cleanOrphanedData(state) {
   
   state.tasks = state.tasks.filter(t => !t.projectId || projectIds.has(t.projectId));
   
+  const taskIds = new Set(state.tasks.map(task => task.id).filter(Boolean));
   state.tasks.forEach(task => {
-    if (Array.isArray(task.dependencies)) {
-      task.dependencies = task.dependencies.filter(dep => state.tasks.some(t => t.id === dep));
-    }
+    task.dependencies = Array.isArray(task.dependencies)
+      ? [...new Set(task.dependencies)].filter(dep => taskIds.has(dep) && dep !== task.id)
+      : [];
   });
   
   const afterCount = state.tasks.length;
@@ -313,6 +388,13 @@ app.use((req, res, next) => {
 
 // Body parser with strict validation
 app.use(express.json({ limit: CONFIG.MAX_PAYLOAD_SIZE, strict: true }));
+app.use((req, res, next) => {
+  const requestedPath = decodeURIComponent(req.path).replace(/^\/+/, '');
+  if (requestedPath.startsWith('data/') || PRIVATE_STATIC_PATHS.has(requestedPath)) {
+    return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname)));
 
 // ============================================
@@ -346,10 +428,11 @@ app.post('/api/state', async (req, res) => {
     const beforeCount = tasks.length;
     tasks = tasks.filter(t => !t.projectId || projectIds.has(t.projectId));
     
+    const taskIds = new Set(tasks.map(task => task.id).filter(Boolean));
     tasks.forEach(task => {
-      if (Array.isArray(task.dependencies)) {
-        task.dependencies = task.dependencies.filter(dep => tasks.some(t => t.id === dep));
-      }
+      task.dependencies = Array.isArray(task.dependencies)
+        ? [...new Set(task.dependencies)].filter(dep => taskIds.has(dep) && dep !== task.id)
+        : [];
     });
     
     const state = {
@@ -376,9 +459,11 @@ app.post('/api/share', async (req, res) => {
       return res.status(400).json({ error: 'Invalid share payload', code: 'INVALID_PAYLOAD' });
     }
 
+    pruneExpiredShares();
     const shareId = crypto.randomUUID();
-    sharedViews.set(shareId, body);
-    res.json({ success: true, shareId });
+    sharedViews.set(shareId, { payload: body, expiresAt: Date.now() + SHARE_TTL_MS });
+    pruneExpiredShares();
+    res.json({ success: true, shareId, expiresInMs: SHARE_TTL_MS });
   } catch (error) {
     Logger.error('POST /api/share failed', { error: error.message });
     res.status(500).json({ error: 'Failed to create share link', code: 'SHARE_FAILED' });
@@ -386,9 +471,9 @@ app.post('/api/share', async (req, res) => {
 });
 
 app.get('/api/share/:id', (req, res) => {
-  const sharedData = sharedViews.get(req.params.id);
+  const sharedData = getSharePayload(req.params.id);
   if (!sharedData) {
-    return res.status(404).json({ error: 'Shared view not found', code: 'NOT_FOUND' });
+    return res.status(404).json({ error: 'Shared view not found or expired', code: 'NOT_FOUND' });
   }
   res.json(sharedData);
 });
@@ -449,6 +534,9 @@ app.post('/api/sheets/fetch', async (req, res) => {
       return res.status(504).json({ error: 'Google Sheets request timed out', code: 'TIMEOUT' });
     }
     Logger.error('POST /api/sheets/fetch failed', { error: error.message });
+    if (isGoogleSheetsInputError(error)) {
+      return res.status(400).json({ error: error.message, code: 'INVALID_URL' });
+    }
     res.status(500).json({ error: 'Failed to fetch Google Sheet data', code: 'FETCH_FAILED' });
   }
 });
@@ -504,6 +592,9 @@ app.post('/api/sheets/tabs', async (req, res) => {
       return res.status(504).json({ error: 'Google Sheets tabs request timed out', code: 'TIMEOUT' });
     }
     Logger.error('POST /api/sheets/tabs failed', { error: error.message });
+    if (isGoogleSheetsInputError(error)) {
+      return res.status(400).json({ error: error.message, code: 'INVALID_URL' });
+    }
     res.status(500).json({ error: 'Failed to load sheet tabs', code: 'FETCH_FAILED' });
   }
 });
@@ -559,6 +650,9 @@ app.use((err, req, res, next) => {
   Logger.error('Unhandled error', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error', code: 'INTERNAL_ERROR' });
 });
+
+const shareCleanupTimer = setInterval(pruneExpiredShares, Math.min(SHARE_TTL_MS, 60 * 60 * 1000));
+shareCleanupTimer.unref?.();
 
 // ============================================
 // SERVER STARTUP
